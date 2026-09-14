@@ -1,0 +1,1 @@
+"""LangGraph AgentState schema definition."""
