@@ -1,57 +1,19 @@
-version: "3.8"
+version: '3.8'
 
 services:
-  app:
+  tilik-backend:
     build:
       context: .
-      dockerfile: Dockerfile.dev
-    container_name: tilik_ai_app
+      dockerfile: Dockerfile
+    container_name: tilik_ai_backend
+    restart: unless-stopped
     ports:
       - "8000:8000"
-    volumes:
-      - .:/app
-    environment:
-      - APP_NAME=TilikAI
-      - APP_ENV=development
-      - DEBUG=True
-      - PORT=8000
-      - POSTGRES_HOST=db
-      - POSTGRES_PORT=5432
-      - POSTGRES_USER=tilik_user
-      - POSTGRES_PASSWORD=tilik_password
-      - POSTGRES_DB=tilik_db
-      - DATABASE_URL=postgresql+asyncpg://tilik_user:tilik_password@db:5432/tilik_db
     env_file:
       - .env
-    depends_on:
-      db:
-        condition: service_healthy
-    networks:
-      - tilik_network
-
-  db:
-    image: postgres:16-alpine
-    container_name: tilik_ai_db
-    environment:
-      POSTGRES_USER: tilik_user
-      POSTGRES_PASSWORD: tilik_password
-      POSTGRES_DB: tilik_db
-    ports:
-      - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U tilik_user -d tilik_db"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    networks:
-      - tilik_network
-
-volumes:
-  postgres_data:
-    driver: local
-
-networks:
-  tilik_network:
-    driver: bridge
+      - ./app:/app/app
+      - ./data:/app/data
+    environment:
+      - PORT=8000
+      - HOST=0.0.0.0

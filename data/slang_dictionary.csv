@@ -1,0 +1,53 @@
+slang_term,formal_ticker,category,meaning,sentiment_bias,context_examples
+si ijo,GOTO,TICKER_ALIAS,Julukan saham GoTo Gojek Tokopedia Tbk karena identitas warna hijau,NEUTRAL,Si ijo mulai diserok bandar YP di harga gocap
+kambing ijo,GOTO,TICKER_ALIAS,Julukan sarkastis emiten GOTO saat harga anjlok,BEARISH,Kambing ijo balik lagi ke gocap ritel nangis
+gotod,GOTO,TICKER_ALIAS,Julukan plesetan kesal investor ritel terhadap GOTO,BEARISH,Gotod jualan mulu kapan terbangnya
+paman,BREN,TICKER_ALIAS,Julukan untuk saham konglomerasi Barito milik Prajogo Pangestu,BULLISH,Saham paman ditarik ke langit lagi hari ini
+om pp,BREN,TICKER_ALIAS,"Julukan konglomerasi Prajogo Pangestu (BREN, PTRO, CUAN, BRPT)",BULLISH,Om PP masuk barang tebal siap-siap to the moon
+geng barito,BRPT,TICKER_ALIAS,Kelompok saham milik Prajogo Pangestu,BULLISH,Geng barito kompak hijau hari ini IHSG ikut terkerek
+saham sejuta umat,ANTM,TICKER_ALIAS,Julukan saham favorit investor ritel saat demam nikel dan emas,NEUTRAL,Saham sejuta umat lagi diguyur bandar asing
+antin,ANTM,TICKER_ALIAS,Plesetan santai untuk Aneka Tambang Tbk,NEUTRAL,Antin mulai mantul dari support kuat
+beceha,BBCA,TICKER_ALIAS,Plesetan fonetik untuk Bank Central Asia Tbk,BULLISH,Beceha dividen interim cair lagi mantap
+bank sultan,BBCA,TICKER_ALIAS,Julukan BBCA sebagai saham paling defensif dan aman,BULLISH,Biar badai IHSG merah bank sultan tetap kokoh
+beberi,BBRI,TICKER_ALIAS,Plesetan fonetik untuk Bank Rakyat Indonesia Tbk,NEUTRAL,Beberi asing net sell terus nih mending tunggu di bawah
+mandur,BMRI,TICKER_ALIAS,Plesetan Bank Mandiri Tbk,NEUTRAL,Mandur all time high lagi dividen jumbo
+saham indomie,ICBP,TICKER_ALIAS,Julukan Indofood CBP Sukses Makmur Tbk produsen Indomie,NEUTRAL,Saham indomie defensif cocok buat simpanan jangka panjang
+saham odol,UNVR,TICKER_ALIAS,Julukan Unilever Indonesia Tbk produsen pasta gigi Pepsodent,BEARISH,Saham odol longsor terus nyangkut bertahun-tahun
+saham sabun,UNVR,TICKER_ALIAS,Julukan Unilever Indonesia Tbk,BEARISH,Saham sabun labanya tergerus boikot ritel boncos
+saham dino,TLKM,TICKER_ALIAS,Julukan Telkom Indonesia karena kapitalisasi raksasa tapi lambat bergerak,NEUTRAL,Saham dino tidur mulu kapan bangunnya
+bumi,BUMI,TICKER_ALIAS,Bumi Resources Tbk saham legendaris ritel,NEUTRAL,Bumi mulai ada transaksi volume jumbo lagi
+saham om boy,ADRO,TICKER_ALIAS,Saham grup Adaro milik Garibaldi Boy Thohir,BULLISH,Saham om boy mau spin-off mineral bagi dividen gede
+haka,,ACTION,Hajar Kanan - membeli langsung di kolom offer agar order langsung match,BULLISH,HAKA sekarang sebelum kehabisan barang di antrean
+haki,,ACTION,Hajar Kiri - menjual langsung di kolom bid agar saham langsung laku,BEARISH,Bandar mulai HAKI brutal di sesi dua kabur
+serok,,ACTION,Membeli saham saat harga anjlok tajam dengan keyakinan harga di dasar,BULLISH,Saatnya serok bawah mumpung ada diskon besar
+serok bawah,,ACTION,Strategi membeli di titik support terendah,BULLISH,Tunggu di 50 baru serok bawah jangan fomo
+guyur,,ACTION,Aksi jual masif oleh investor besar/bandar ke kolom antrean beli,BEARISH,Awas diguyur bandar jangan pasang antrean tebal
+banting,,ACTION,Menjatuhkan harga saham beberapa fraksi secara mendadak untuk memicu panik,BEARISH,Saham dibanting 5 fraksi ritel langsung panik cut loss
+kerek,,ACTION,Mendorong harga saham naik agresif dengan cara HAKA beruntun,BULLISH,Bandar mulai kerek harga ke ARA
+titip sandal,,ACTION,Membeli sedikit lot (1-5 lot) sekadar untuk menandai di portofolio,NEUTRAL,Titip sandal dulu 1 lot kalau terbang biar ada barang
+tampung,,ACTION,Memasang antrean beli tebal di bawah untuk menyerap barang buangan,BULLISH,Asing siap nampung di harga bawah
+disilet,,ACTION,Cut loss brutal dalam posisi rugi puluhan persen,BEARISH,Portofolio disilet habis-habisan udah gak kuat nahan
+cuci piring,,MARKET_CONDITION,Kondisi ritel membeli di harga pucuk dan menanggung rugi saat pesta selesai,BEARISH,Jangan fomo nanti cuma kebagian cuci piring
+nyangkut di pucuk,,MARKET_CONDITION,Membeli di harga tertinggi sebelum harga anjlok drastis,BEARISH,Nyangkut di pucuk gara-gara kemakan pom-pom twitter
+boncos,,MARKET_CONDITION,Mengalami kerugian modal yang signifikan,BEARISH,Bulan ini boncos parah gara-gara saham gorengan
+cuan,,MARKET_CONDITION,Mendapatkan keuntungan dari transaksi saham,BULLISH,Alhamdulillah cuan luber 20 persen hari ini
+bagger,,MARKET_CONDITION,Keuntungan investasi berlipat ganda 100% atau lebih,BULLISH,Saham ini calon multi bagger simpan rapi
+gocap,,MARKET_CONDITION,Harga saham Rp50 per lembar batas bawah reguler,BEARISH,Nyungsep ke harga gocap gak bisa gerak
+saham tidur,,MARKET_CONDITION,Saham yang tidak memiliki likuiditas transaksi dan stagnan,NEUTRAL,Duit mati di saham tidur mending dialihkan
+gorengan,,MARKET_CONDITION,Saham kapitalisasi kecil yang mudah dimanipulasi volatilitasnya,MANIPULATIVE,Jangan all-in di saham gorengan sangat berisiko
+fca,,MARKET_CONDITION,Papan Pemantauan Khusus tahap Full Call Auction lelang tertutup,BEARISH,Masuk neraka FCA harga langsung ambles tiap sesi
+dividen trap,,MARKET_CONDITION,Penurunan harga saham lebih dalam dari persentase dividen pasca cum-date,BEARISH,Kena jebakan dividen trap dividen cuma 5 persen harga turun 15 persen
+tatoan,,MARKET_CONDITION,Saham yang memiliki notasi khusus peringatan dari BEI,BEARISH,Emiten penuh tato bursa mending hindari
+salah harga,,HYPE_TRIGGER,Klaim subjektif bahwa saham dinilai sangat murah dan pasti melonjak,MANIPULATIVE,Ini saham beneran salah harga buruan masuk sebelum rame
+to the moon,,HYPE_TRIGGER,Klaim berlebihan bahwa harga saham akan terbang tanpa batas,MANIPULATIVE,Siap-siap to the moon jangan sampai ketinggalan kereta
+ketinggalan kereta,,HYPE_TRIGGER,Narasi urgensi untuk memicu ketakutan tertinggal momentum,MANIPULATIVE,HAKA sekarang jemput di stasiun berikutnya udah mahal
+bandar akumulasi,,HYPE_TRIGGER,Klaim bahwa pelaku pasar besar sedang mengumpulkan barang,MANIPULATIVE,Bandar akumulasi gila-gilaan chart mangkok sempurna
+koreksi sehat,,HYPE_TRIGGER,Alasan penenang saat harga turun padahal bandar sedang distribusi,MANIPULATIVE,Tenang cuma koreksi sehat habis ini ditarik lagi
+dyor,,HYPE_TRIGGER,Do Your Own Research klausul lepas tanggung jawab finfluencer,NEUTRAL,Target price 1000 tapi dyor ya disclaimer on
+pom-pom,,HYPE_TRIGGER,Aktivitas mempromosikan saham dengan narasi berlebihan untuk menaikkan harga,MANIPULATIVE,Hati-hati pom-pom influencer akun centang biru
+yp,,BROKER,PT Mirae Asset Sekuritas Indonesia representasi mayoritas ritel domestik,NEUTRAL,YP borong banyak tapi asing jualan bersih
+pd,,BROKER,PT Indo Premier Sekuritas broker ritel pemula dan mahasiswa,NEUTRAL,Broker PD ikutan haka di sesi pagi
+xc,,BROKER,PT Ajaib Sekuritas Asia broker ritel digital generasi muda,NEUTRAL,XC akumulasi kecil-kecilan di saham lapis tiga
+ak,,BROKER,PT UBS Sekuritas Indonesia indikator smart money asing,BULLISH,AK masuk barang tebel sinyal bullish kuat
+bk,,BROKER,PT J.P. Morgan Sekuritas Indonesia representasi institusi global,BULLISH,BK net buy konsisten 5 hari di saham blue chip
+rx,,BROKER,PT Macquarie Sekuritas Indonesia broker asing aktif,BULLISH,RX tampung guyuran di pasar negosiasi

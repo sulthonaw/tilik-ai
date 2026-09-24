@@ -49,3 +49,7 @@ coverage.xml
 
 # Docker / Postgres volumes (local)
 postgres_data/
+
+# ChromaDB local storage
+data/chroma_db/
+chroma_db/
