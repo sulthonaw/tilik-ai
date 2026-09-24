@@ -18,6 +18,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger("tilik-ai")
 
+# Suppress internal Google SDK function calling advisory logs
+logging.getLogger("google_genai").setLevel(logging.ERROR)
+logging.getLogger("google_genai.models").setLevel(logging.ERROR)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:

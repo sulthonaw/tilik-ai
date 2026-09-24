@@ -10,6 +10,7 @@ from app.agent.prompts import (
     DEFAULT_COOLING_OFF_PROMPTS,
     EVALUATOR_SYSTEM_PROMPT,
     NER_SLANG_SYSTEM_PROMPT,
+    SYNTHESIZER_SYSTEM_PROMPT,
 )
 from app.core.config import settings
 from app.models.schemas import (
@@ -296,14 +297,18 @@ async def evaluator_node(state: AgentState) -> Dict[str, Any]:
     if pbv_ratio and industry_median_pbv:
         pct_diff = round(((pbv_ratio - industry_median_pbv) / industry_median_pbv) * 100, 1)
         if pct_diff > 15:
-            valuation_status = f"{abs(pct_diff)}% Lebih Mahal dari Median Sektor"
+            valuation_status = f"Harga Premium ({abs(pct_diff)}% Lebih Tinggi dari Rata-Rata Industri)"
+            val_fact = f"Harga Tergolong Premium: Saat ini dihargai {pbv_ratio}x dari modal bersihnya, {abs(pct_diff)}% lebih tinggi dari rata-rata industri ({industry_median_pbv}x)."
             valuation_unfavorable = True
         elif pct_diff < -15:
-            valuation_status = f"{abs(pct_diff)}% Lebih Murah dari Median Sektor"
+            valuation_status = f"Harga Diskon ({abs(pct_diff)}% Lebih Murah dari Rata-Rata Industri)"
+            val_fact = f"Harga Tergolong Diskon: Saat ini dihargai {pbv_ratio}x dari modal bersihnya, {abs(pct_diff)}% lebih murah dibanding rata-rata industri ({industry_median_pbv}x)."
         else:
-            valuation_status = "Valuasi Seimbang dengan Median Sektor"
+            valuation_status = "Harga Wajar (Seimbang dengan Rata-Rata Industri)"
+            val_fact = f"Harga Wajar: Saat ini dihargai {pbv_ratio}x dari modal bersihnya, seimbang dengan rata-rata saham sejenis ({industry_median_pbv}x)."
     else:
         valuation_status = "Data Valuasi Tidak Lengkap"
+        val_fact = "Data rasio valuasi belum cukup lengkap untuk dibandingkan dengan sektor."
 
     # 2. Broker Flow Extraction
     foreign_net_idr = -12500000000.0
@@ -360,17 +365,20 @@ async def evaluator_node(state: AgentState) -> Dict[str, Any]:
             BrokerDetail(broker_code="BK", broker_type="Asing / Institusi", net_value_idr=18700000000.0, action="NET_SELL"),
         ]
 
-    has_retail_buyers = any("Ritel" in b.broker_type for b in top_buyers)
-    foreign_selling = foreign_net_idr < 0
-
-    if foreign_selling and has_retail_buyers:
-        summary_verdict = f"Asing jualan bersih Rp {abs(round(foreign_net_idr / 1e9, 1))} Miliar, kenaikan volume murni transaksi ritel domestik"
-        flow_unfavorable = True
-    elif not foreign_selling:
-        summary_verdict = f"Asing net buy Rp {round(foreign_net_idr / 1e9, 1)} Miliar, didukung akumulasi broker institusi"
+    # Zero Hallucination: Sinkronisasi Angka & Narasi
+    if foreign_net_idr > 0:
+        foreign_m = round(foreign_net_idr / 1e9, 1)
+        summary_verdict = f"Investor Asing borong bersih Rp {foreign_m} Miliar, didorong oleh akumulasi broker institusi besar"
+        flow_fact = f"Investor Asing Borong Besar: Ada dana asing masuk bersih Rp {foreign_m} Miliar hari ini melalui broker institusi besar."
         flow_unfavorable = False
+    elif foreign_net_idr < 0:
+        foreign_m = abs(round(foreign_net_idr / 1e9, 1))
+        summary_verdict = f"Investor Asing jualan bersih Rp {foreign_m} Miliar, kenaikan volume murni transaksi ritel domestik"
+        flow_fact = f"Asing Jualan Bersih: Tercatat dana asing keluar bersih Rp {foreign_m} Miliar, volume beli didominasi transaksi ritel domestik."
+        flow_unfavorable = True
     else:
         summary_verdict = "Distribusi broker netral tanpa akumulasi institusi dominan"
+        flow_fact = "Arus Dana Netral: Transaksi didominasi perputaran wajar tanpa akumulasi atau distribusi agresif dari investor asing."
         flow_unfavorable = False
 
     # 3. Financial Health & FCA Extraction
@@ -404,46 +412,65 @@ async def evaluator_node(state: AgentState) -> Dict[str, Any]:
         if "earnings_growth_yoy" in latest:
             net_profit_growth_yoy = float(latest["earnings_growth_yoy"])
 
-    # 4. Synthesize Fact Points (Max 25 words / 150 chars each)
+    # 4. Synthesize Fact Points (Prinsip Analogi Warung & Bahasa Manusiawi)
     status_fact = (
-        "Saham masuk dalam Papan Pemantauan Khusus (FCA) dengan notasi peringatan BEI."
+        "Perhatian Khusus: Saham ini sedang dipantau ketat bursa (Papan FCA) karena likuiditas rendah atau masalah kinerja."
         if is_fca
-        else "Saham diperdagangkan normal dan tidak masuk dalam Papan Pemantauan Khusus (FCA)."
+        else "Sangat Aman: Berjalan normal, sehat secara operasional, dan bebas dari sanksi atau pantauan khusus bursa."
     )
+
     points: List[FactCheckPoint] = [
         FactCheckPoint(
-            title="Valuasi Relatif",
-            fact=f"PBV emiten {pbv_ratio}x, berada {valuation_status.lower()}.",
+            title="Kewajaran Harga Saham",
+            fact=val_fact[:150],
             is_favorable=not valuation_unfavorable,
         ),
         FactCheckPoint(
-            title="Akumulasi Broker",
-            fact="Akumulasi YP adalah transaksi ritel kecil, sementara top broker asing mencatatkan net sell.",
+            title="Arus Dana Asing",
+            fact=flow_fact[:150],
             is_favorable=not flow_unfavorable,
         ),
         FactCheckPoint(
-            title="Status Bursa",
-            fact=status_fact,
+            title="Keamanan & Status Saham",
+            fact=status_fact[:150],
             is_favorable=not is_fca,
         ),
     ]
 
     # 5. Verdict Determination
-    # If text contains hype triggers (salah harga, to the moon) and valuation is expensive with foreign selling:
-    has_hype = any("salah harga" in raw_text.lower() or "to the moon" in raw_text.lower() or "haka" in raw_text.lower() for _ in [1])
+    has_hype = any(
+        k in raw_text.lower()
+        for k in ["salah harga", "to the moon", "haka", "ketinggalan kereta", "terbang"]
+    )
     
     if is_fca or (has_hype and valuation_unfavorable and flow_unfavorable):
         verdict = VerdictLevel.RED
         confidence_score = 0.94
-        cooling_off = DEFAULT_COOLING_OFF_PROMPTS["RED"]
     elif valuation_unfavorable or flow_unfavorable or net_profit_growth_yoy < 0:
         verdict = VerdictLevel.YELLOW
-        confidence_score = 0.88
-        cooling_off = DEFAULT_COOLING_OFF_PROMPTS["YELLOW"]
+        confidence_score = 0.92
     else:
         verdict = VerdictLevel.GREEN
         confidence_score = 0.92
-        cooling_off = DEFAULT_COOLING_OFF_PROMPTS["GREEN"]
+
+    # 6. Contextual & Empathetic Cooling-Off Prompt
+    text_lower = raw_text.lower()
+    is_entry_question = any(
+        q in text_lower for q in ["worth it", "beli sekarang", "tunggu drop", "masuk gak", "mending tunggu", "?", "bisa beli"]
+    )
+    ticker_name = state.get("detected_ticker") or "Saham ini"
+
+    if is_fca:
+        cooling_off = DEFAULT_COOLING_OFF_PROMPTS["FCA"]
+    elif is_entry_question:
+        if valuation_unfavorable:
+            cooling_off = f"Tarik napas 5 detik! {ticker_name} sangat solid dan didukung dana asing, tetapi harganya sedang di level premium. Lebih bijak membeli bertahap (mencicil) daripada terburu-buru all-in!"
+        else:
+            cooling_off = f"Tarik napas 5 detik! Perhatikan rencana trading dan siapkan skema beli bertahap (DCA) sesuai profil risiko Anda."
+    elif has_hype and (valuation_unfavorable or flow_unfavorable):
+        cooling_off = DEFAULT_COOLING_OFF_PROMPTS["RED"]
+    else:
+        cooling_off = DEFAULT_COOLING_OFF_PROMPTS.get(verdict.value, DEFAULT_COOLING_OFF_PROMPTS["YELLOW"])
 
     evaluation = {
         "verdict": verdict,
@@ -491,6 +518,48 @@ async def synthesizer_node(state: AgentState) -> Dict[str, Any]:
     val_detail = eval_data.get("valuation_peer")
     flow_detail = eval_data.get("broker_flow")
     fin_detail = eval_data.get("financial_health")
+
+    # If Gemini API key is active, synthesize human-centered facts & empathetic prompt
+    api_key = settings.effective_gemini_api_key
+    if api_key and not api_key.startswith("your_") and len(api_key) > 15:
+        try:
+            from langchain_google_genai import ChatGoogleGenerativeAI
+            llm = ChatGoogleGenerativeAI(
+                model=settings.GEMINI_MODEL,
+                google_api_key=api_key,
+                temperature=0.0,
+            )
+            raw_text = state.get("raw_text", "")
+            data_context = (
+                f"Emiten: {ticker} ({company_name})\n"
+                f"Valuasi PBV: {val_detail.pbv_ratio}x (Median Industri: {val_detail.industry_median_pbv}x)\n"
+                f"Status Valuasi: {val_detail.valuation_status}\n"
+                f"Arus Asing: Net IDR {flow_detail.foreign_net_idr}\n"
+                f"Top Buyers: {[b.broker_code for b in flow_detail.top_buyers]}\n"
+                f"Status FCA: {fin_detail.is_fca}\n"
+                f"Cuitan Pengguna: {raw_text}"
+            )
+            prompt_str = SYNTHESIZER_SYSTEM_PROMPT + f"\n\nDATA FINANCIAL EMITEN:\n{data_context}\n\nCUITAN USER:\n{raw_text}"
+            res = await llm.ainvoke(prompt_str)
+            content = res.content if hasattr(res, "content") else str(res)
+            json_match = re.search(r"\{[\s\S]*\}", content)
+            if json_match:
+                parsed = json.loads(json_match.group(0))
+                if parsed.get("cooling_off_prompt"):
+                    cooling_off = parsed["cooling_off_prompt"]
+                if parsed.get("points") and isinstance(parsed["points"], list) and len(parsed["points"]) >= 1:
+                    llm_points: List[FactCheckPoint] = []
+                    for p in parsed["points"][:3]:
+                        if "title" in p and "fact" in p:
+                            llm_points.append(FactCheckPoint(
+                                title=p["title"],
+                                fact=str(p["fact"])[:150],
+                                is_favorable=bool(p.get("is_favorable", True)),
+                            ))
+                    if llm_points:
+                        points = llm_points
+        except Exception as e:
+            logger.debug(f"Gemini synthesizer fallback: {e}")
 
     expanded_details = ExpandedDetails(
         valuation=val_detail,

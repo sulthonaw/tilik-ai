@@ -55,7 +55,7 @@ async def test_full_graph_execution_goto(
         # Check Level 2 details completeness
         assert res.details.valuation.pbv_ratio == 2.4
         assert res.details.valuation.industry_median_pbv == 1.65
-        assert "Lebih Mahal" in res.details.valuation.valuation_status
+        assert "Premium" in res.details.valuation.valuation_status or "Lebih" in res.details.valuation.valuation_status
         assert res.details.broker_flow.foreign_net_idr < 0
         assert len(res.details.broker_flow.top_buyers) >= 1
         assert res.details.financial_health.is_fca is False

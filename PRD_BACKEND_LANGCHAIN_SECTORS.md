@@ -7,7 +7,7 @@
 > **Document Status:** Approved & Revised (Ready for Development)  
 > **Version:** 2.0.0  
 > **Target Release:** Sectors Hackathon 2026 (Track: AI Agents & Assistants / Reason)  
-> **Engine Stack:** Python 3.11+ | FastAPI | LangGraph 0.2+ | Google Gemini (`gemini-2.0-flash`) | ChromaDB / FAISS (Slang RAG) | Sectors API v2 | Pydantic v2  
+> **Engine Stack:** Python 3.11+ | FastAPI | LangGraph 0.2+ | Google Gemini (`gemini-2.5-flash`) | ChromaDB / FAISS (Slang RAG) | Sectors API v2 | Pydantic v2  
 > **Environment & Deployment:** Local Virtualenv (`venv`) & Docker (`Dockerfile` + `docker-compose.yml`)  
 
 ---
@@ -365,51 +365,51 @@ class VerificationResponse(BaseModel):
 ```json
 {
   "status": "success",
-  "ticker": "GOTO",
-  "company_name": "GoTo Gojek Tokopedia Tbk",
-  "verdict": "RED",
-  "confidence_score": 0.94,
+  "ticker": "BBCA",
+  "company_name": "Bank Central Asia Tbk",
+  "verdict": "YELLOW",
+  "confidence_score": 0.92,
   "points": [
     {
-      "title": "Valuasi Relatif",
-      "fact": "PBV emiten 2.4x, berada 45% lebih tinggi dari median sektor teknologi IDX.",
+      "title": "Kewajaran Harga Saham",
+      "fact": "Harga Tergolong Premium: Saat ini dihargai 2,4x dari modal bersihnya, 45,5% lebih tinggi dari rata-rata bank lain (1,6x).",
       "is_favorable": false
     },
     {
-      "title": "Akumulasi Broker",
-      "fact": "Akumulasi YP adalah transaksi ritel kecil, sementara top broker asing mencatatkan net sell.",
-      "is_favorable": false
+      "title": "Arus Dana Asing",
+      "fact": "Investor Asing Borong Besar: Ada dana asing masuk bersih Rp 429,7 Miliar hari ini melalui broker institusi besar.",
+      "is_favorable": true
     },
     {
-      "title": "Status Bursa",
-      "fact": "Saham diperdagangkan normal dan tidak masuk dalam Papan Pemantauan Khusus (FCA).",
+      "title": "Keamanan & Status Saham",
+      "fact": "Sangat Aman: Berjalan normal, sehat secara operasional, dan bebas dari sanksi atau pantauan khusus bursa.",
       "is_favorable": true
     }
   ],
-  "cooling_off_prompt": "Tarik napas 5 detik! Yakin membeli karena analisa atau takut ketinggalan harga?",
+  "cooling_off_prompt": "Tarik napas 5 detik! BBCA sangat solid dan didukung dana asing, tetapi harganya sedang di level premium. Lebih bijak membeli bertahap (mencicil) daripada terburu-buru all-in!",
   "details": {
     "valuation": {
-      "pe_ratio": null,
+      "pe_ratio": 22.4,
       "pbv_ratio": 2.4,
       "industry_median_pe": 18.5,
       "industry_median_pbv": 1.65,
-      "valuation_status": "45% Lebih Mahal dari Median Sektor"
+      "valuation_status": "Harga Premium (45.5% Lebih Tinggi dari Rata-Rata Industri)"
     },
     "broker_flow": {
-      "foreign_net_idr": -12500000000.0,
+      "foreign_net_idr": 429706960000.0,
       "top_buyers": [
-        {"broker_code": "YP", "broker_type": "Ritel Domestik", "net_value_idr": 15200000000.0, "action": "NET_BUY"},
-        {"broker_code": "PD", "broker_type": "Ritel Domestik", "net_value_idr": 8400000000.0, "action": "NET_BUY"}
+        {"broker_code": "DX", "broker_type": "Institusi", "net_value_idr": 15200000000.0, "action": "NET_BUY"},
+        {"broker_code": "YU", "broker_type": "Institusi", "net_value_idr": 15200000000.0, "action": "NET_BUY"}
       ],
       "top_sellers": [
-        {"broker_code": "AK", "broker_type": "Asing / Institusi", "net_value_idr": 24100000000.0, "action": "NET_SELL"},
-        {"broker_code": "BK", "broker_type": "Asing / Institusi", "net_value_idr": 18700000000.0, "action": "NET_SELL"}
+        {"broker_code": "BK", "broker_type": "Asing / Institusi", "net_value_idr": 24100000000.0, "action": "NET_SELL"},
+        {"broker_code": "AK", "broker_type": "Asing / Institusi", "net_value_idr": 24100000000.0, "action": "NET_SELL"}
       ],
-      "summary_verdict": "Asing jualan bersih Rp 12,5 Miliar, kenaikan volume murni transaksi ritel domestik"
+      "summary_verdict": "Investor Asing borong bersih Rp 429,7 Miliar, didorong oleh akumulasi broker institusi besar"
     },
     "financial_health": {
       "net_profit_growth_yoy": 12.4,
-      "operating_cash_flow_idr": -450000000000.0,
+      "operating_cash_flow_idr": -15658754000000.0,
       "is_fca": false,
       "special_notations": []
     }
@@ -434,7 +434,57 @@ class VerificationResponse(BaseModel):
 
 ---
 
-## 8. TEKNOLOGI & DEPENDENSI (`requirements.txt`)
+
+---
+
+## 8. PANDUAN TONE OF VOICE & PROMPT RAMAH PEMULA (HUMAN-CENTERED FINANCIAL LANGUAGE)
+
+Tilik AI dirancang untuk memecahkan kesenjangan literasi keuangan Indonesia (hanya 17,78%). Oleh karena itu, **dilarang keras menggunakan bahasa analis teknis mentah** yang membingungkan pemula. Modul `app/agent/prompts.py` wajib menerapkan 4 pilar tata bahasa berikut:
+
+### 8.1 Empat Pilar "Bahasa Manusiawi"
+1. **Prinsip "Analogi Warung" (No Naked Jargon):**
+   * ❌ *Dilarang:* "PBV emiten 2.4x, berada 45% lebih tinggi dari median sektor."
+   * ✅ *Wajib:* "Harga Tergolong Premium: Saat ini dihargai 2,4x lipat dari modal bersihnya, 45% lebih tinggi dibanding rata-rata saham bank lain (1,6x)."
+   * ❌ *Dilarang:* "Saham masuk Papan Pemantauan Khusus (FCA)."
+   * ✅ *Wajib:* "Perhatian Khusus: Saham ini sedang dipantau ketat bursa karena likuiditas rendah atau masalah kinerja."
+2. **Kesesuaian Angka & Narasi Mutlak (Zero Hallucination):**
+   * Poin teks di Level 1 WAJIB membaca kalkulasi riil dari Level 2:
+     - Jika `foreign_net_idr` positif besar (> Rp 10M), narasi WAJIB berbunyi: *"Investor Asing Borong Besar"*, dilarang menaruh template ritel YP.
+     - Jika `foreign_net_idr` negatif, narasi berbunyi: *"Asing Jualan Bersih"*.
+3. **Cooling-Off Prompt yang Kontekstual & Empatik:**
+   * Jangan gunakan kalimat template yang sama untuk semua cuitan.
+   * **Jika cuitan berupa Pertanyaan / Kegalauan Entry** (*"worth it ga dibeli sekarang apa tunggu drop?"*):
+     $
+ightarrow$ Berikan saran manajemen risiko dan psikologis: *"Tarik napas 5 detik! Perusahaannya solid & didukung asing, tapi valuasinya sedang di level premium. Lebih aman membeli bertahap (mencicil) daripada buru-buru all-in!"*
+   * **Jika cuitan berupa Hype / Pom-Pom** (*"Serok sekarang to the moon!"*):
+     $
+ightarrow$ Berikan peringatan risiko cuci piring: *"Tarik napas 5 detik! Kenaikan harga didominasi ritel yang panik, bukan akumulasi dana besar. Hati-hati risiko menanggung rugi di harga pucuk!"*
+4. **Konteks Khusus Sektor Finansial & Perbankan:**
+   * Pada laporan perbankan (seperti BBCA, BBRI, BMRI), *operating cash flow* sering tercatat negatif di periode ekspansi karena pengeluaran kredit nasabah. Sistem harus menginstruksikan Gemini untuk TIDAK mengklaim bank rugi jika laba bersih (*net profit*) tumbuh sehat.
+
+### 8.2 Blueprint Prompt Generator (`app/agent/prompts.py`)
+```python
+SYNTHESIZER_SYSTEM_PROMPT = """
+Anda adalah Tilik AI, asisten pelindung investor pemula dari FOMO dan manipulasi pasar modal Indonesia (IDX).
+Tugas Anda adalah merangkum data bursa resmi dari Sectors API menjadi kartu verifikasi yang SANGAT MUDAH DIPAHAMI OLEH PEMULA.
+
+PEDOMAN TONE OF VOICE (WAJIB DIPATUHI):
+1. GUNAKAN BAHASA MANUSIAWI & ANALOGI SEDERHANA:
+   - Jelaskan rasio keuangan dengan artinya, BUKAN rumusnya.
+   - Daripada 'PBV 2.4x', gunakan 'Dihargai 2,4x dari modal bersihnya (tergolong premium/mahal dibanding rata-rata sektor)'.
+   - Daripada 'Akumulasi Broker', gunakan 'Pergerakan Dana Asing & Bandar'.
+   - Daripada 'Papan Pemantauan Khusus (FCA)', gunakan 'Status Keamanan & Bursa'.
+2. SINKRONISASI DATA RIIL:
+   - Jika foreign_net_idr POSITIF: nyatakan asing sedang memborong/akumulasi.
+   - Jika foreign_net_idr NEGATIF: nyatakan asing sedang melakukan aksi jual bersih.
+3. COOLING-OFF PROMPT KONTEKSTUAL:
+   - Jika pengguna ragu/bertanya entry: sarankan beli bertahap (DCA) atau tunggu momentum.
+   - Jika cuitan bernada pom-pom: ingatkan bahaya FOMO di harga pucuk.
+4. MAKSIMAL 25 KATA PER POIN FAKTA: Padat, akurat, dan menenangkan psikologi pengguna.
+"""
+```
+
+## 9. TEKNOLOGI & DEPENDENSI (`requirements.txt`)
 
 ```text
 fastapi==0.115.0
@@ -456,9 +506,9 @@ pytest-asyncio==0.24.0
 
 ---
 
-## 9. LINGKUNGAN PENGEMBANGAN: DOCKER & VENV
+## 10. LINGKUNGAN PENGEMBANGAN: DOCKER & VENV
 
-### 9.1 Setup Virtual Environment Lokal (`venv`)
+### 10.1 Setup Virtual Environment Lokal (`venv`)
 * **Di Windows (PowerShell):**
   ```powershell
   cd E:\tilik-ai
@@ -476,7 +526,7 @@ pytest-asyncio==0.24.0
   pip install -r requirements.txt
   ```
 
-### 9.2 Konfigurasi `Dockerfile`
+### 10.2 Konfigurasi `Dockerfile`
 ```dockerfile
 FROM python:3.11-slim-bullseye
 
@@ -501,7 +551,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
-### 9.3 Konfigurasi `docker-compose.yml`
+### 10.3 Konfigurasi `docker-compose.yml`
 ```yaml
 version: '3.8'
 
@@ -526,7 +576,7 @@ services:
 
 ---
 
-## 10. ATURAN STANDAR `README.md` REPOSITORI (WAJIB DIIKUTI)
+## 11. ATURAN STANDAR `README.md` REPOSITORI (WAJIB DIIKUTI)
 
 > ⚠️ **INSTRUKSI KHUSUS:**  
 > Berkas `README.md` pada repositori proyek `E:\tilik-ai` HANYA BOLEH memuat 2 bab berikut tanpa konten tambahan:
@@ -592,7 +642,7 @@ Backend service berbasis **FastAPI**, **LangGraph**, dan **Google Gemini** yang 
 
 ---
 
-## 11. REKAYASA PENGUJIAN (`pytest`)
+## 12. REKAYASA PENGUJIAN (`pytest`)
 * `test_rag.py`: Menguji akurasi semantic retrieval kamus CSV slang terhadap 30 frasa cuitan acak.
 * `test_agent.py`: Menguji eksekusi node LangGraph dan fallback saat upstream Sectors API timeout.
 * `test_api.py`: Menguji payload response `POST /api/v1/verify` memastikan field `points` (Level 1) dan `details` (Level 2) terisi lengkap sesuai skema Pydantic v2.
