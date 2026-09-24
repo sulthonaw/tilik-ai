@@ -256,10 +256,40 @@ async def evaluator_node(state: AgentState) -> Dict[str, Any]:
     suspension_data = sectors_data.get("suspensions", {})
 
     # 1. Valuation Metrics Extraction
-    pe_ratio = valuation_data.get("pe_ratio") or valuation_data.get("pe")
-    pbv_ratio = valuation_data.get("pb_ratio") or valuation_data.get("pbv") or 2.4
-    industry_median_pe = peers_data.get("median_pe") or 18.5
-    industry_median_pbv = peers_data.get("median_pb") or 1.65
+    pe_ratio = None
+    pbv_ratio = None
+    if isinstance(valuation_data, dict):
+        pe_ratio = valuation_data.get("pe_ratio") or valuation_data.get("pe")
+        pbv_ratio = valuation_data.get("pb_ratio") or valuation_data.get("pbv") or valuation_data.get("pb_mrq")
+    if pbv_ratio is None:
+        pbv_ratio = 2.4
+
+    # Calculate median from peers if list, or get from dict
+    industry_median_pe = 18.5
+    industry_median_pbv = 1.65
+    if isinstance(peers_data, dict):
+        industry_median_pe = peers_data.get("median_pe") or industry_median_pe
+        industry_median_pbv = peers_data.get("median_pb") or industry_median_pbv
+    elif isinstance(peers_data, list):
+        pe_vals = []
+        pb_vals = []
+        for p in peers_data:
+            if isinstance(p, dict):
+                sub_peers = p.get("peers") if isinstance(p.get("peers"), list) else [p]
+                for sp in sub_peers:
+                    if isinstance(sp, dict):
+                        pe = sp.get("pe_ttm") or sp.get("pe_ratio") or sp.get("pe")
+                        pb = sp.get("pb_mrq") or sp.get("pb_ratio") or sp.get("pb")
+                        if pe and isinstance(pe, (int, float)) and pe > 0:
+                            pe_vals.append(float(pe))
+                        if pb and isinstance(pb, (int, float)) and pb > 0:
+                            pb_vals.append(float(pb))
+        if pe_vals:
+            pe_vals.sort()
+            industry_median_pe = round(pe_vals[len(pe_vals) // 2], 2)
+        if pb_vals:
+            pb_vals.sort()
+            industry_median_pbv = round(pb_vals[len(pb_vals) // 2], 2)
 
     # Check valuation premium
     valuation_unfavorable = False
@@ -281,9 +311,17 @@ async def evaluator_node(state: AgentState) -> Dict[str, Any]:
         flow_records = foreign_data.get("data", [])
         if flow_records and isinstance(flow_records, list) and len(flow_records) > 0:
             foreign_net_idr = float(flow_records[0].get("net_foreign_inflow", foreign_net_idr))
+    elif isinstance(foreign_data, list) and len(foreign_data) > 0:
+        if isinstance(foreign_data[0], dict) and "net_foreign_inflow" in foreign_data[0]:
+            foreign_net_idr = float(foreign_data[0]["net_foreign_inflow"])
 
-    raw_buyers = top_brokers_data.get("top_buyers", [])
-    raw_sellers = top_brokers_data.get("top_sellers", [])
+    raw_buyers = []
+    raw_sellers = []
+    if isinstance(top_brokers_data, dict):
+        raw_buyers = top_brokers_data.get("top_buyers", [])
+        raw_sellers = top_brokers_data.get("top_sellers", [])
+    elif isinstance(top_brokers_data, list):
+        raw_buyers = top_brokers_data
 
     top_buyers: List[BrokerDetail] = []
     top_sellers: List[BrokerDetail] = []
@@ -338,16 +376,21 @@ async def evaluator_node(state: AgentState) -> Dict[str, Any]:
     # 3. Financial Health & FCA Extraction
     is_fca = False
     special_notations: List[str] = []
+    results = []
     if isinstance(suspension_data, dict):
         results = suspension_data.get("results", [])
-        if results:
-            is_fca = any(
-                "FCA" in str(r.get("reason", "")).upper()
-                or "PEMANTAUAN" in str(r.get("reason", "")).upper()
-                or str(r.get("notation", "")).upper() == "X"
-                for r in results
-            )
-            for r in results:
+    elif isinstance(suspension_data, list):
+        results = suspension_data
+
+    if results:
+        is_fca = any(
+            "FCA" in str(r.get("reason", "")).upper()
+            or "PEMANTAUAN" in str(r.get("reason", "")).upper()
+            or str(r.get("notation", "")).upper() == "X"
+            for r in results if isinstance(r, dict)
+        )
+        for r in results:
+            if isinstance(r, dict):
                 notation = r.get("notation")
                 if notation and notation not in special_notations:
                     special_notations.append(str(notation))

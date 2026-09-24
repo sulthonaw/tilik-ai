@@ -127,7 +127,13 @@ async def test_fca_stock_verdict_red(
 
 
 @pytest.mark.asyncio
-async def test_agent_node_state_transitions():
+async def test_agent_node_state_transitions(
+    mock_sectors_company_report,
+    mock_sectors_quarterly,
+    mock_sectors_top_brokers,
+    mock_sectors_foreign_flow,
+    mock_sectors_suspensions_clean,
+):
     """Verify individual node state transitions in LangGraph."""
     initial_state: AgentState = {
         "raw_text": "Saham paman ditarik ke langit",
@@ -144,19 +150,32 @@ async def test_agent_node_state_transitions():
     intent_out = await intent_node(state_after_ner)
     assert len(intent_out["claims"]) > 0
 
-    # Node 3
-    state_after_intent = {**state_after_ner, **intent_out}
-    fetch_out = await concurrent_fetch_node(state_after_intent)
-    assert "sectors_data" in fetch_out
+    # Node 3 with mocked Sectors API
+    with (
+        patch("app.services.sectors_client.SectorsAPIClient.get_company_report", new_callable=AsyncMock) as m_rep,
+        patch("app.services.sectors_client.SectorsAPIClient.get_quarterly_financials", new_callable=AsyncMock) as m_q,
+        patch("app.services.sectors_client.SectorsAPIClient.get_top_brokers", new_callable=AsyncMock) as m_b,
+        patch("app.services.sectors_client.SectorsAPIClient.get_foreign_flow", new_callable=AsyncMock) as m_f,
+        patch("app.services.sectors_client.SectorsAPIClient.get_suspensions", new_callable=AsyncMock) as m_s,
+    ):
+        m_rep.return_value = mock_sectors_company_report
+        m_q.return_value = mock_sectors_quarterly
+        m_b.return_value = mock_sectors_top_brokers
+        m_f.return_value = mock_sectors_foreign_flow
+        m_s.return_value = mock_sectors_suspensions_clean
 
-    # Node 4
-    state_after_fetch = {**state_after_intent, **fetch_out}
-    eval_out = await evaluator_node(state_after_fetch)
-    assert "evaluation" in eval_out
-    assert eval_out["evaluation"]["verdict"] in [VerdictLevel.RED, VerdictLevel.YELLOW, VerdictLevel.GREEN]
+        state_after_intent = {**state_after_ner, **intent_out}
+        fetch_out = await concurrent_fetch_node(state_after_intent)
+        assert "sectors_data" in fetch_out
 
-    # Node 5
-    state_after_eval = {**state_after_fetch, **eval_out}
-    synth_out = await synthesizer_node(state_after_eval)
-    assert "response" in synth_out
-    assert isinstance(synth_out["response"], VerificationResponse)
+        # Node 4
+        state_after_fetch = {**state_after_intent, **fetch_out}
+        eval_out = await evaluator_node(state_after_fetch)
+        assert "evaluation" in eval_out
+        assert eval_out["evaluation"]["verdict"] in [VerdictLevel.RED, VerdictLevel.YELLOW, VerdictLevel.GREEN]
+
+        # Node 5
+        state_after_eval = {**state_after_fetch, **eval_out}
+        synth_out = await synthesizer_node(state_after_eval)
+        assert "response" in synth_out
+        assert isinstance(synth_out["response"], VerificationResponse)
