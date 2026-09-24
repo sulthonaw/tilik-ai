@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     # Google Gemini Settings
     GOOGLE_API_KEY: Optional[str] = Field(default=None, alias="GEMINI_API_KEY")
     GEMINI_API_KEY: Optional[str] = None
-    GEMINI_MODEL: str = "gemini-2.5-flash"
+    GEMINI_MODEL: str = "gemini-flash-lite-latest"
 
     # Sectors API Settings
     SECTORS_API_KEY: Optional[str] = None
