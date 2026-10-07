@@ -53,3 +53,6 @@ postgres_data/
 # ChromaDB local storage
 data/chroma_db/
 chroma_db/
+
+# Verification history local storage
+data/history/*.json

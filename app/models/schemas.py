@@ -121,6 +121,7 @@ class VerificationResponse(BaseModel):
     details: ExpandedDetails
 
     is_cached: bool = Field(False)
+    history_id: Optional[str] = Field(None, description="Unique ID rekaman riwayat verifikasi")
 
 
 class HealthResponse(BaseModel):
@@ -170,3 +171,31 @@ class AuthResponse(BaseModel):
 class UserProfileResponse(BaseModel):
     status: str = Field("success", json_schema_extra={"example": "success"})
     user: UserPayload
+
+
+# --- HISTORY SCHEMAS ---
+class HistoryItemSummary(BaseModel):
+    id: str = Field(..., description="Unique ID rekaman riwayat verifikasi")
+    created_at: str = Field(..., description="Timestamp ISO verifikasi dilakukan")
+    ticker: Optional[str] = Field(None, description="Kode saham IDX, misal: GOTO")
+    company_name: Optional[str] = Field(None, description="Nama perusahaan emiten resmi")
+    user_role: UserRole = Field(..., description="Role saat verifikasi (PEMULA atau EXPERT)")
+    verdict: VerdictLevel = Field(..., description="Status lampu lalu lintas verifikasi")
+    confidence_score: float = Field(..., description="Skor keyakinan algoritma")
+    tweet_preview: str = Field(..., description="Potongan awal teks cuitan pengguna")
+    source_platform: Optional[str] = Field("x", description="Platform media sosial sumber")
+
+
+class HistoryListResponse(BaseModel):
+    status: str = Field("success", json_schema_extra={"example": "success"})
+    total: int = Field(..., description="Jumlah total riwayat yang tersimpan")
+    items: List[HistoryItemSummary] = Field(default_factory=list, description="Daftar ringkasan riwayat verifikasi")
+
+
+class HistoryDetailResponse(BaseModel):
+    status: str = Field("success", json_schema_extra={"example": "success"})
+    id: str = Field(..., description="Unique ID rekaman riwayat")
+    created_at: str = Field(..., description="Timestamp ISO verifikasi dilakukan")
+    tweet_text: str = Field(..., description="Teks lengkap cuitan yang diverifikasi")
+    source_platform: Optional[str] = Field("x", description="Platform media sosial sumber")
+    verification: VerificationResponse = Field(..., description="Hasil lengkap verifikasi Level 1 dan Level 2")

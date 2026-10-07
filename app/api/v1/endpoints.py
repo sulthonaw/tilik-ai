@@ -3,7 +3,7 @@
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from app.agent.graph import run_verification
 from app.core.cache import cache
@@ -20,6 +20,9 @@ from app.models.schemas import (
     AuthResponse,
     GoogleAuthRequest,
     HealthResponse,
+    HistoryDetailResponse,
+    HistoryItemSummary,
+    HistoryListResponse,
     UserPayload,
     UserProfileResponse,
     UserRole,
@@ -28,6 +31,7 @@ from app.models.schemas import (
     VerifyTweetRequest,
 )
 from app.rag.slang_store import slang_store
+from app.services.history_service import history_service
 from app.services.user_service import user_service
 
 logger = logging.getLogger("api_v1_endpoints")
@@ -164,12 +168,21 @@ async def verify_tweet(
             detail="Teks terlalu pendek setelah sanitasi (minimal 5 karakter).",
         )
 
+    user_id = current_user.google_id if current_user else "guest"
+
     # 1. Check SHA256 in-memory cache with effective_role
     cache_key = f"{effective_role.value}:{cleaned_text}"
     cached_res: Optional[VerificationResponse] = cache.get(cache_key)
     if cached_res is not None:
         logger.info(f"Serving verification from SHA256 cache for role={effective_role.value}")
         cached_copy = cached_res.model_copy(update={"is_cached": True})
+        hist_id = history_service.add_history(
+            user_id=user_id,
+            tweet_text=cleaned_text,
+            source_platform=payload.source_platform or "x",
+            verification=cached_copy,
+        )
+        cached_copy.history_id = hist_id
         return cached_copy
 
     # 2. Execute LangGraph workflow
@@ -183,8 +196,18 @@ async def verify_tweet(
 
         # 3. Store in cache
         cache.set(cache_key, response)
+
+        # 4. Record to verification history
+        hist_id = history_service.add_history(
+            user_id=user_id,
+            tweet_text=cleaned_text,
+            source_platform=payload.source_platform or "x",
+            verification=response,
+        )
+        response.history_id = hist_id
+
         logger.info(
-            f"Verifikasi selesai: Ticker={response.ticker}, Role={response.user_role.value}, Verdict={response.verdict.value}, Confidence={response.confidence_score:.2f}"
+            f"Verifikasi selesai: Ticker={response.ticker}, Role={response.user_role.value}, Verdict={response.verdict.value}, Confidence={response.confidence_score:.2f}, HistID={hist_id}"
         )
         return response
     except Exception as e:
@@ -195,6 +218,83 @@ async def verify_tweet(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Terjadi kesalahan saat memproses verifikasi cuitan: {str(e)}",
         )
+
+
+# ==========================================
+# HISTORY ENDPOINTS (Click to detail)
+# ==========================================
+@router.get(
+    "/history",
+    response_model=HistoryListResponse,
+    summary="Get Verification History",
+    description="Retrieves chronological verification history for the current authenticated user or guest.",
+)
+async def list_verification_history(
+    limit: int = Query(default=20, ge=1, le=100, description="Jumlah item per halaman"),
+    offset: int = Query(default=0, ge=0, description="Offset pemanggilan riwayat"),
+    current_user: Optional[UserPayload] = Depends(get_current_user_optional),
+) -> HistoryListResponse:
+    """Returns list of past verification summaries for easy clicking."""
+    user_id = current_user.google_id if current_user else "guest"
+    items, total = history_service.list_history(user_id=user_id, limit=limit, offset=offset)
+    return HistoryListResponse(
+        status="success",
+        total=total,
+        items=items,
+    )
+
+
+@router.get(
+    "/history/{history_id}",
+    response_model=HistoryDetailResponse,
+    summary="Get Verification History Detail",
+    description="Retrieves full verification detail (Level 1 and Level 2 data) by history ID for deep inspection.",
+)
+async def get_verification_history_detail(
+    history_id: str,
+) -> HistoryDetailResponse:
+    """Returns complete Level 1 and Level 2 verification response when a card is clicked."""
+    detail = history_service.get_history_detail(history_id)
+    if not detail:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Riwayat verifikasi dengan ID '{history_id}' tidak ditemukan.",
+        )
+    return detail
+
+
+@router.delete(
+    "/history/{history_id}",
+    summary="Delete Single History Record",
+    description="Deletes a specific history record by its unique ID.",
+)
+async def delete_verification_history_item(
+    history_id: str,
+    current_user: Optional[UserPayload] = Depends(get_current_user_optional),
+):
+    """Deletes single history item."""
+    user_id = current_user.google_id if current_user else "guest"
+    deleted = history_service.delete_history_item(history_id, user_id=user_id)
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Riwayat verifikasi dengan ID '{history_id}' tidak ditemukan.",
+        )
+    return {"status": "success", "message": f"Riwayat '{history_id}' berhasil dihapus."}
+
+
+@router.delete(
+    "/history",
+    summary="Clear Verification History",
+    description="Clears all verification history for current authenticated user or guest.",
+)
+async def clear_verification_history(
+    current_user: Optional[UserPayload] = Depends(get_current_user_optional),
+):
+    """Clears all history for user."""
+    user_id = current_user.google_id if current_user else "guest"
+    history_service.clear_user_history(user_id=user_id)
+    return {"status": "success", "message": "Semua riwayat verifikasi berhasil dibersihkan."}
 
 
 @router.get(
