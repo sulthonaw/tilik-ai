@@ -74,24 +74,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info(f"Shutting down {settings.APP_NAME}")
 
 
-API_DESCRIPTION = """
-### 🔍 Tilik AI — In-Context Financial Fact-Checker & Slang RAG Engine for IDX Stocks
-
-Tilik AI adalah layanan backend cerdas yang memvalidasi narasi dan klaim saham di media sosial (X, Threads, Telegram)
-secara instan (< 1,5 detik) menggunakan data bursa resmi dari **Sectors API v2** dan basis pengetahuan **Slang RAG**.
-
-#### 🛡️ Prinsip Regulasi & Invarian Sistem:
-- **Kepatuhan OJK (POJK No. 6/2026 & UU P2SK):** Murni berposisi sebagai *Factual Information Provider* dengan menyandingkan *Klaim Medsos vs Data Resmi IDX* serta klausul *Disclaimer On*. Dilarang memberikan rekomendasi personal, sinyal transaksi (beli/jual), atau target price.
-- **Tanpa Eksekusi Perdagangan Otomatis:** Sistem bersifat analitis, edukatif, dan fact-checking (*no automated trade execution*).
-- **Dual-Level Output Payload:**
-  - **Level 1 (Summary Card):** Status lampu lalu lintas (🔴 HOAX / BAHAYA, 🟡 WASPADA, 🟢 SESUAI FAKTA), 1–3 poin fakta kunci (maks 25 kata/poin), dan catatan refleksi kontekstual (*cooling-off prompt* untuk pemula atau *Devil's Advocate* untuk expert).
-  - **Level 2 (Expanded Data - Zero Latency):** Rincian angka fundamental mendalam (valuasi vs median sektor, broker flow institusi vs ritel, pertumbuhan laba & OCF, status suspensi/FCA) langsung ter-bundle tanpa pemanggilan AI tambahan.
-"""
-
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.VERSION,
-    description=API_DESCRIPTION,
+    description="Tilik AI — In-Context Financial Fact-Checker & Slang RAG Engine for IDX Stocks",
     openapi_tags=OPENAPI_TAGS,
     docs_url="/docs",
     redoc_url="/redoc",
