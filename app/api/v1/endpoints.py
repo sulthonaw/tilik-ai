@@ -8,13 +8,103 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from app.agent.graph import run_verification
 from app.core.cache import cache
 from app.core.config import settings
-from app.core.security import check_rate_limit, sanitize_input_text
-from app.models.schemas import HealthResponse, VerificationResponse, VerifyTweetRequest
+from app.core.security import (
+    check_rate_limit,
+    create_access_token,
+    get_current_user,
+    get_current_user_optional,
+    sanitize_input_text,
+    verify_google_id_token,
+)
+from app.models.schemas import (
+    AuthResponse,
+    GoogleAuthRequest,
+    HealthResponse,
+    UserPayload,
+    UserProfileResponse,
+    VerificationResponse,
+    VerifyTweetRequest,
+)
 from app.rag.slang_store import slang_store
 
 logger = logging.getLogger("api_v1_endpoints")
 
 router = APIRouter()
+
+
+@router.post(
+    "/auth/google",
+    response_model=AuthResponse,
+    summary="Sign in with Google",
+    description="Exchanges Google ID Token from client for a Tilik AI JWT access token.",
+    dependencies=[Depends(check_rate_limit)],
+)
+async def login_with_google(payload: GoogleAuthRequest) -> AuthResponse:
+    """Verifies client-provided Google ID Token and returns JWT bearer token."""
+    try:
+        id_info = verify_google_id_token(payload.id_token)
+        google_id = id_info.get("sub")
+        email = id_info.get("email")
+        if not google_id or not email:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Token Google tidak memuat identifier akun (sub/email) yang valid.",
+            )
+
+        user = UserPayload(
+            email=email,
+            name=id_info.get("name"),
+            picture=id_info.get("picture"),
+            google_id=google_id,
+        )
+
+        token_data = {
+            "sub": google_id,
+            "email": email,
+            "name": user.name,
+            "picture": user.picture,
+        }
+        access_token = create_access_token(data=token_data)
+        expires_in = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+
+        logger.info(f"User berhasil login via Google: {email} ({google_id})")
+        return AuthResponse(
+            status="success",
+            access_token=access_token,
+            token_type="bearer",
+            expires_in=expires_in,
+            user=user,
+        )
+    except ValueError as e:
+        logger.warning(f"Google login failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error during Google login: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Terjadi kesalahan pada server saat memproses login Google.",
+        )
+
+
+@router.get(
+    "/auth/me",
+    response_model=UserProfileResponse,
+    summary="Get Current User Profile",
+    description="Returns authenticated user information from validated Bearer JWT token.",
+)
+async def get_current_user_profile(
+    current_user: UserPayload = Depends(get_current_user),
+) -> UserProfileResponse:
+    """Returns profile for currently authenticated user."""
+    return UserProfileResponse(
+        status="success",
+        user=current_user,
+    )
 
 
 @router.post(
@@ -27,8 +117,11 @@ router = APIRouter()
 async def verify_tweet(
     payload: VerifyTweetRequest,
     request: Request,
+    current_user: Optional[UserPayload] = Depends(get_current_user_optional),
 ) -> VerificationResponse:
     """Single unified endpoint for full Level 1 and Level 2 verification."""
+    caller = current_user.email if current_user else "anonymous/guest"
+    logger.info(f"Permintaan verifikasi diterima dari: {caller}")
     cleaned_text = sanitize_input_text(payload.text)
     if len(cleaned_text) < 5:
         raise HTTPException(

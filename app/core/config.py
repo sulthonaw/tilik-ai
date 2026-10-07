@@ -57,6 +57,12 @@ class Settings(BaseSettings):
     # Rate Limiting
     RATE_LIMIT_PER_MINUTE: int = 60
 
+    # Google OAuth & JWT Authentication
+    GOOGLE_CLIENT_ID: Optional[str] = None
+    JWT_SECRET_KEY: str = "tilik-ai-dev-secret-key-change-in-production-2026"
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 jam
+
     @property
     def effective_gemini_api_key(self) -> Optional[str]:
         """Returns GEMINI_API_KEY or GOOGLE_API_KEY if available."""

@@ -117,3 +117,28 @@ class HealthResponse(BaseModel):
     sectors_api: str = Field("connected", json_schema_extra={"example": "connected"})
     slang_rag_records: int = Field(0, json_schema_extra={"example": 52})
     cache_backend: str = Field("in_memory", json_schema_extra={"example": "redis | in_memory"})
+
+
+# --- GOOGLE AUTH SCHEMAS ---
+class GoogleAuthRequest(BaseModel):
+    id_token: str = Field(..., description="Google ID Token (JWT) yang diperoleh dari Android Google Credential Manager atau Google Sign-In SDK")
+
+
+class UserPayload(BaseModel):
+    email: str = Field(..., description="Alamat email pengguna dari akun Google")
+    name: Optional[str] = Field(None, description="Nama lengkap pengguna")
+    picture: Optional[str] = Field(None, description="URL avatar Google profile")
+    google_id: str = Field(..., description="Identitas unik Google pengguna (sub claim)")
+
+
+class AuthResponse(BaseModel):
+    status: str = Field("success", json_schema_extra={"example": "success"})
+    access_token: str = Field(..., description="JWT Bearer access token untuk Tilik AI")
+    token_type: str = Field("bearer", json_schema_extra={"example": "bearer"})
+    expires_in: int = Field(..., description="Masa berlaku token dalam detik (misal: 86400)")
+    user: UserPayload
+
+
+class UserProfileResponse(BaseModel):
+    status: str = Field("success", json_schema_extra={"example": "success"})
+    user: UserPayload
