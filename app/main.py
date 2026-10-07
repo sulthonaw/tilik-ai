@@ -5,8 +5,11 @@ import time
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.requests import Request
 from starlette.responses import Response
 
@@ -26,6 +29,34 @@ logging.getLogger("google_genai").setLevel(logging.ERROR)
 logging.getLogger("google_genai.models").setLevel(logging.ERROR)
 
 
+OPENAPI_TAGS = [
+    {
+        "name": "Verification",
+        "description": "Endpoint utama verifikasi fakta cuitan saham menggunakan data resmi Sectors API v2 dan RAG Slang bursa.",
+    },
+    {
+        "name": "History",
+        "description": "Pengelolaan dan inspeksi mendalam (click-to-detail) riwayat verifikasi Level 1 dan Level 2.",
+    },
+    {
+        "name": "Authentication",
+        "description": "Autentikasi Google Sign-In dan penerbitan token JWT Bearer.",
+    },
+    {
+        "name": "User Settings",
+        "description": "Pengaturan preferensi profil pengguna (mode PEMULA atau EXPERT).",
+    },
+    {
+        "name": "Health",
+        "description": "Pemeriksaan kesehatan sistem, konektivitas Sectors API, Gemini LLM, RAG store, dan Cache.",
+    },
+    {
+        "name": "Root",
+        "description": "Informasi dasar service gateway dan shortcut endpoint.",
+    },
+]
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Lifespan event handler for startup and shutdown actions."""
@@ -43,10 +74,25 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info(f"Shutting down {settings.APP_NAME}")
 
 
+API_DESCRIPTION = """
+### 🔍 Tilik AI — In-Context Financial Fact-Checker & Slang RAG Engine for IDX Stocks
+
+Tilik AI adalah layanan backend cerdas yang memvalidasi narasi dan klaim saham di media sosial (X, Threads, Telegram)
+secara instan (< 1,5 detik) menggunakan data bursa resmi dari **Sectors API v2** dan basis pengetahuan **Slang RAG**.
+
+#### 🛡️ Prinsip Regulasi & Invarian Sistem:
+- **Kepatuhan OJK (POJK No. 6/2026 & UU P2SK):** Murni berposisi sebagai *Factual Information Provider* dengan menyandingkan *Klaim Medsos vs Data Resmi IDX* serta klausul *Disclaimer On*. Dilarang memberikan rekomendasi personal, sinyal transaksi (beli/jual), atau target price.
+- **Tanpa Eksekusi Perdagangan Otomatis:** Sistem bersifat analitis, edukatif, dan fact-checking (*no automated trade execution*).
+- **Dual-Level Output Payload:**
+  - **Level 1 (Summary Card):** Status lampu lalu lintas (🔴 HOAX / BAHAYA, 🟡 WASPADA, 🟢 SESUAI FAKTA), 1–3 poin fakta kunci (maks 25 kata/poin), dan catatan refleksi kontekstual (*cooling-off prompt* untuk pemula atau *Devil's Advocate* untuk expert).
+  - **Level 2 (Expanded Data - Zero Latency):** Rincian angka fundamental mendalam (valuasi vs median sektor, broker flow institusi vs ritel, pertumbuhan laba & OCF, status suspensi/FCA) langsung ter-bundle tanpa pemanggilan AI tambahan.
+"""
+
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.VERSION,
-    description="Tilik AI — In-Context Financial Fact-Checker & Slang RAG Engine for IDX Stocks",
+    description=API_DESCRIPTION,
+    openapi_tags=OPENAPI_TAGS,
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json",
@@ -61,6 +107,55 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ==========================================
+# STANDARDIZED EXCEPTION HANDLERS
+# ==========================================
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    """Menyeragamkan respons HTTPException menjadi format JSON terstruktur yang konsisten."""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail},
+        headers=getattr(exc, "headers", None),
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Menangani error validasi skema input (422) dengan pesan ringkas ramah pengguna."""
+    errors = exc.errors()
+    err_descriptions = []
+    for err in errors:
+        loc = ".".join(str(item) for item in err.get("loc", []) if item != "body")
+        msg = err.get("msg", "Nilai tidak valid")
+        err_descriptions.append(f"{loc}: {msg}" if loc else msg)
+
+    friendly_msg = "; ".join(err_descriptions) if err_descriptions else "Format data permintaan tidak valid."
+    return JSONResponse(
+        status_code=422,
+        content={
+            "detail": errors,
+            "message": f"Validasi input gagal: {friendly_msg}",
+        },
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    """Menangani exception yang tidak tertangkap agar tidak menyebabkan server crash atau return HTML mentah."""
+    logger.error(
+        f"[Unhandled Exception] {request.method} {request.url.path} - {type(exc).__name__}: {str(exc)}"
+    )
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={
+            "detail": "Terjadi kesalahan internal pada server. Silakan coba beberapa saat lagi.",
+            "error_type": type(exc).__name__,
+        },
+    )
+
 
 
 @app.middleware("http")

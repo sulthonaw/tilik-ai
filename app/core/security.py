@@ -58,7 +58,7 @@ async def check_rate_limit(request: Request) -> None:
     if not allowed:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"Rate limit exceeded. Try again in {retry_after} seconds.",
+            detail=f"Batas frekuensi permintaan terlampaui. Silakan coba lagi dalam {retry_after} detik.",
             headers={"Retry-After": str(retry_after)},
         )
 

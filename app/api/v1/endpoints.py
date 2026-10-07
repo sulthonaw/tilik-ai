@@ -18,6 +18,7 @@ from app.core.security import (
 )
 from app.models.schemas import (
     AuthResponse,
+    ErrorResponse,
     GoogleAuthRequest,
     HealthResponse,
     HistoryDetailResponse,
@@ -42,9 +43,16 @@ router = APIRouter()
 @router.post(
     "/auth/google",
     response_model=AuthResponse,
+    tags=["Authentication"],
     summary="Sign in with Google",
     description="Exchanges Google ID Token from client for a Tilik AI JWT access token.",
     dependencies=[Depends(check_rate_limit)],
+    responses={
+        400: {"model": ErrorResponse, "description": "Token Google tidak memuat identifier akun yang valid."},
+        401: {"model": ErrorResponse, "description": "Token Google tidak valid atau kedaluwarsa."},
+        429: {"model": ErrorResponse, "description": "Batas frekuensi permintaan terlampaui."},
+        500: {"model": ErrorResponse, "description": "Kesalahan server internal saat proses login."},
+    },
 )
 async def login_with_google(payload: GoogleAuthRequest) -> AuthResponse:
     """Verifies client-provided Google ID Token and returns JWT bearer token."""
@@ -104,8 +112,12 @@ async def login_with_google(payload: GoogleAuthRequest) -> AuthResponse:
 @router.get(
     "/auth/me",
     response_model=UserProfileResponse,
+    tags=["Authentication"],
     summary="Get Current User Profile",
     description="Returns authenticated user information from validated Bearer JWT token.",
+    responses={
+        401: {"model": ErrorResponse, "description": "Autentikasi diperlukan (Bearer token tidak valid atau tidak disertakan)."},
+    },
 )
 async def get_current_user_profile(
     current_user: UserPayload = Depends(get_current_user),
@@ -120,8 +132,13 @@ async def get_current_user_profile(
 @router.put(
     "/user/settings",
     response_model=UserProfileResponse,
+    tags=["User Settings"],
     summary="Update User Role Setting",
     description="Updates and persists preferred display role (PEMULA or EXPERT) for authenticated user.",
+    responses={
+        401: {"model": ErrorResponse, "description": "Autentikasi diperlukan."},
+        422: {"model": ErrorResponse, "description": "Format role tidak valid (hanya menerima PEMULA atau EXPERT)."},
+    },
 )
 async def update_user_settings(
     payload: UserSettingsUpdate,
@@ -140,9 +157,15 @@ async def update_user_settings(
 @router.post(
     "/verify",
     response_model=VerificationResponse,
+    tags=["Verification"],
     summary="Verify Social Media Stock Tweet",
     description="Fact-checks claims from social media stock posts using Sectors API v2 and Slang RAG.",
     dependencies=[Depends(check_rate_limit)],
+    responses={
+        422: {"model": ErrorResponse, "description": "Teks cuitan terlalu pendek (minimal 5 karakter) atau format request tidak valid."},
+        429: {"model": ErrorResponse, "description": "Batas frekuensi permintaan terlampaui."},
+        500: {"model": ErrorResponse, "description": "Terjadi kesalahan internal pada pipeline verifikasi."},
+    },
 )
 async def verify_tweet(
     payload: VerifyTweetRequest,
@@ -226,6 +249,7 @@ async def verify_tweet(
 @router.get(
     "/history",
     response_model=HistoryListResponse,
+    tags=["History"],
     summary="Get Verification History",
     description="Retrieves chronological verification history for the current authenticated user or guest.",
 )
@@ -247,8 +271,12 @@ async def list_verification_history(
 @router.get(
     "/history/{history_id}",
     response_model=HistoryDetailResponse,
+    tags=["History"],
     summary="Get Verification History Detail",
     description="Retrieves full verification detail (Level 1 and Level 2 data) by history ID for deep inspection.",
+    responses={
+        404: {"model": ErrorResponse, "description": "Riwayat verifikasi dengan ID yang diminta tidak ditemukan."},
+    },
 )
 async def get_verification_history_detail(
     history_id: str,
@@ -265,8 +293,12 @@ async def get_verification_history_detail(
 
 @router.delete(
     "/history/{history_id}",
+    tags=["History"],
     summary="Delete Single History Record",
     description="Deletes a specific history record by its unique ID.",
+    responses={
+        404: {"model": ErrorResponse, "description": "Riwayat verifikasi dengan ID yang diminta tidak ditemukan."},
+    },
 )
 async def delete_verification_history_item(
     history_id: str,
@@ -285,6 +317,7 @@ async def delete_verification_history_item(
 
 @router.delete(
     "/history",
+    tags=["History"],
     summary="Clear Verification History",
     description="Clears all verification history for current authenticated user or guest.",
 )
@@ -300,6 +333,7 @@ async def clear_verification_history(
 @router.get(
     "/health",
     response_model=HealthResponse,
+    tags=["Health"],
     summary="System Health & Connectivity Status",
     description="Checks operational status of Tilik AI backend, RAG store, Gemini, and Sectors API.",
 )

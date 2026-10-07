@@ -1,7 +1,7 @@
 """Pydantic v2 data contracts and response schemas for Tilik AI."""
 
 from enum import Enum
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -199,3 +199,11 @@ class HistoryDetailResponse(BaseModel):
     tweet_text: str = Field(..., description="Teks lengkap cuitan yang diverifikasi")
     source_platform: Optional[str] = Field("x", description="Platform media sosial sumber")
     verification: VerificationResponse = Field(..., description="Hasil lengkap verifikasi Level 1 dan Level 2")
+
+
+# --- STANDARDIZED ERROR SCHEMAS ---
+class ErrorResponse(BaseModel):
+    detail: Any = Field(..., description="Deskripsi detail kesalahan atau daftar kegagalan validasi")
+    message: Optional[str] = Field(None, description="Pesan ringkas kesalahan yang ramah pengguna")
+    error_type: Optional[str] = Field(None, description="Tipe klasifikasi error")
+
