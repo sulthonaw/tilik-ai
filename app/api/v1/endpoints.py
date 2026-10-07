@@ -36,10 +36,11 @@ async def verify_tweet(
             detail="Teks terlalu pendek setelah sanitasi (minimal 5 karakter).",
         )
 
-    # 1. Check SHA256 in-memory cache
-    cached_res: Optional[VerificationResponse] = cache.get(cleaned_text)
+    # 1. Check SHA256 in-memory cache with user_role
+    cache_key = f"{payload.user_role.value}:{cleaned_text}"
+    cached_res: Optional[VerificationResponse] = cache.get(cache_key)
     if cached_res is not None:
-        logger.info("Serving verification from SHA256 cache")
+        logger.info(f"Serving verification from SHA256 cache for role={payload.user_role.value}")
         cached_copy = cached_res.model_copy(update={"is_cached": True})
         return cached_copy
 
@@ -48,15 +49,20 @@ async def verify_tweet(
         response: VerificationResponse = await run_verification(
             text=cleaned_text,
             source_platform=payload.source_platform,
+            user_role=payload.user_role.value,
         )
         response.is_cached = False
 
         # 3. Store in cache
-        cache.set(cleaned_text, response)
-
+        cache.set(cache_key, response)
+        logger.info(
+            f"Verifikasi selesai: Ticker={response.ticker}, Role={response.user_role.value}, Verdict={response.verdict.value}, Confidence={response.confidence_score:.2f}"
+        )
         return response
     except Exception as e:
-        logger.error(f"Error during verification: {e}", exc_info=True)
+        logger.error(
+            f"Verifikasi cuitan gagal: {type(e).__name__} - {str(e)}"
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Terjadi kesalahan saat memproses verifikasi cuitan: {str(e)}",

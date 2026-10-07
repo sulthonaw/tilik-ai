@@ -53,6 +53,7 @@ async def test_verify_tweet_full_payload_structure(
         patch("app.services.sectors_client.SectorsAPIClient.get_top_brokers", new_callable=AsyncMock) as m_b,
         patch("app.services.sectors_client.SectorsAPIClient.get_foreign_flow", new_callable=AsyncMock) as m_f,
         patch("app.services.sectors_client.SectorsAPIClient.get_suspensions", new_callable=AsyncMock) as m_s,
+        patch("app.agent.nodes._invoke_gemini", new_callable=AsyncMock, return_value=None),
     ):
         m_rep.return_value = mock_sectors_company_report
         m_q.return_value = mock_sectors_quarterly
@@ -63,6 +64,7 @@ async def test_verify_tweet_full_payload_structure(
         payload = {
             "text": "Si ijo mulai diserok bandar YP di harga gocap, valuasi salah harga to the moon!",
             "source_platform": "x",
+            "user_role": "PEMULA",
         }
         resp = await async_client.post("/api/v1/verify", json=payload)
         assert resp.status_code == 200
@@ -72,7 +74,8 @@ async def test_verify_tweet_full_payload_structure(
         assert data["status"] == "success"
         assert data["ticker"] == "GOTO"
         assert data["company_name"] == "GoTo Gojek Tokopedia Tbk"
-        assert data["verdict"] in ["RED", "YELLOW", "GREEN"]
+        assert data["user_role"] == "PEMULA"
+        assert data["verdict"] in ["HOAX_BAHAYA", "WASPADA", "SESUAI_FAKTA"]
         assert 0.0 <= data["confidence_score"] <= 1.0
         assert data["is_cached"] is False
 
@@ -114,6 +117,42 @@ async def test_verify_tweet_full_payload_structure(
 
 
 @pytest.mark.asyncio
+async def test_verify_tweet_expert_role(
+    async_client: AsyncClient,
+    mock_sectors_company_report,
+    mock_sectors_quarterly,
+    mock_sectors_top_brokers,
+    mock_sectors_foreign_flow,
+    mock_sectors_suspensions_clean,
+):
+    """Test POST /api/v1/verify in EXPERT mode returns expert-tailored prompt."""
+    with (
+        patch("app.services.sectors_client.SectorsAPIClient.get_company_report", new_callable=AsyncMock) as m_rep,
+        patch("app.services.sectors_client.SectorsAPIClient.get_quarterly_financials", new_callable=AsyncMock) as m_q,
+        patch("app.services.sectors_client.SectorsAPIClient.get_top_brokers", new_callable=AsyncMock) as m_b,
+        patch("app.services.sectors_client.SectorsAPIClient.get_foreign_flow", new_callable=AsyncMock) as m_f,
+        patch("app.services.sectors_client.SectorsAPIClient.get_suspensions", new_callable=AsyncMock) as m_s,
+        patch("app.agent.nodes._invoke_gemini", new_callable=AsyncMock, return_value=None),
+    ):
+        m_rep.return_value = mock_sectors_company_report
+        m_q.return_value = mock_sectors_quarterly
+        m_b.return_value = mock_sectors_top_brokers
+        m_f.return_value = mock_sectors_foreign_flow
+        m_s.return_value = mock_sectors_suspensions_clean
+
+        payload = {
+            "text": "Si ijo mulai diserok bandar YP di harga gocap, valuasi salah harga to the moon!",
+            "source_platform": "x",
+            "user_role": "EXPERT",
+        }
+        resp = await async_client.post("/api/v1/verify", json=payload)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["user_role"] == "EXPERT"
+        assert "Devil's Advocate" in data["cooling_off_prompt"]
+
+
+@pytest.mark.asyncio
 async def test_verify_tweet_sha256_cache_hit(
     async_client: AsyncClient,
     mock_sectors_company_report,
@@ -129,6 +168,7 @@ async def test_verify_tweet_sha256_cache_hit(
         patch("app.services.sectors_client.SectorsAPIClient.get_top_brokers", new_callable=AsyncMock) as m_b,
         patch("app.services.sectors_client.SectorsAPIClient.get_foreign_flow", new_callable=AsyncMock) as m_f,
         patch("app.services.sectors_client.SectorsAPIClient.get_suspensions", new_callable=AsyncMock) as m_s,
+        patch("app.agent.nodes._invoke_gemini", new_callable=AsyncMock, return_value=None),
     ):
         m_rep.return_value = mock_sectors_company_report
         m_q.return_value = mock_sectors_quarterly
@@ -136,7 +176,7 @@ async def test_verify_tweet_sha256_cache_hit(
         m_f.return_value = mock_sectors_foreign_flow
         m_s.return_value = mock_sectors_suspensions_clean
 
-        payload = {"text": "Saham paman ditarik ke langit to the moon"}
+        payload = {"text": "Saham paman ditarik ke langit to the moon", "user_role": "PEMULA"}
 
         # First call -> cache miss
         resp1 = await async_client.post("/api/v1/verify", json=payload)
@@ -145,7 +185,7 @@ async def test_verify_tweet_sha256_cache_hit(
         assert m_rep.call_count == 1
 
         # Second call with slightly different spacing -> cache hit (normalized text)
-        payload_same = {"text": "  Saham  paman   ditarik ke langit to the moon  "}
+        payload_same = {"text": "  Saham  paman   ditarik ke langit to the moon  ", "user_role": "PEMULA"}
         resp2 = await async_client.post("/api/v1/verify", json=payload_same)
         assert resp2.status_code == 200
         assert resp2.json()["is_cached"] is True

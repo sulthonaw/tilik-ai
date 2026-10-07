@@ -7,15 +7,28 @@ from pydantic import BaseModel, Field
 
 
 class VerdictLevel(str, Enum):
-    """Traffic light verdict status."""
-    RED = "RED"          # Klaim palsu / Hype manipulatif / Valuasi ekstrem / Papan FCA
-    YELLOW = "YELLOW"    # Fakta separuh / Ada risiko tersembunyi
-    GREEN = "GREEN"      # Klaim terkonfirmasi data fundamental riil
+    """Traffic light verdict status according to PRD v2 & POJK Invariants."""
+
+    HOAX_BAHAYA = "HOAX_BAHAYA"  # 🔴 HOAX / BAHAYA: Klaim bohong, pom-pom manipulatif, atau saham bertato suspensi
+    WASPADA = "WASPADA"  # 🟡 WASPADA: Ada fakta tersembunyi/separuh benar, atau harga kemahalan/premium
+    SESUAI_FAKTA = "SESUAI_FAKTA"  # 🟢 SESUAI FAKTA: Informasi valid dan fundamental terbukti sehat
+
+    # Backward compatibility aliases
+    RED = "HOAX_BAHAYA"
+    YELLOW = "WASPADA"
+    GREEN = "SESUAI_FAKTA"
+
+
+class UserRole(str, Enum):
+    """User proficiency role determining tone of voice and alert prompt."""
+
+    PEMULA = "PEMULA"  # Bahasa santai, analogi sederhana, cooling-off sebagai pesan statis protektif
+    EXPERT = "EXPERT"  # Bahasa teknis padat, istilah industri, devil's advocate prompt
 
 
 # LEVEL 1: Summary Facts (Maksimal 25 kata / 150 karakter per poin)
 class FactCheckPoint(BaseModel):
-    title: str = Field(..., description="Parameter fakta, misal: 'Valuasi PER'")
+    title: str = Field(..., description="Parameter fakta, misal: 'Valuasi PER' atau 'Kewajaran Harga Saham'")
     fact: str = Field(..., max_length=150, description="Uraian komparasi data, maks 25 kata")
     is_favorable: bool = Field(..., description="True jika mendukung fundamental sehat")
 
@@ -65,19 +78,29 @@ class VerifyTweetRequest(BaseModel):
         json_schema_extra={"example": "Si ijo mulai diserok bandar YP, valuasi salah harga to the moon!"},
     )
     source_platform: Optional[str] = Field("x", json_schema_extra={"example": "x | threads | telegram"})
+    user_role: UserRole = Field(
+        UserRole.PEMULA,
+        description="Mode tampilan dan bahasa. Ditetapkan dari pengaturan onboarding pengguna.",
+    )
 
 
 class VerificationResponse(BaseModel):
     status: str = Field("success", json_schema_extra={"example": "success"})
     ticker: Optional[str] = Field(None, json_schema_extra={"example": "GOTO"})
     company_name: Optional[str] = Field(None, json_schema_extra={"example": "GoTo Gojek Tokopedia Tbk"})
+    user_role: UserRole = Field(
+        UserRole.PEMULA,
+        description="Role yang digunakan saat request — di-echo kembali untuk kebutuhan UI rendering",
+    )
 
     # --- LEVEL 1: SUMMARY CARD ---
     verdict: VerdictLevel = Field(..., description="Status lampu lalu lintas")
     confidence_score: float = Field(..., ge=0.0, le=1.0, json_schema_extra={"example": 0.94})
     points: List[FactCheckPoint] = Field(..., min_length=1, max_length=3)
     cooling_off_prompt: str = Field(
-        ..., json_schema_extra={"example": "Tarik napas 5 detik! Yakin membeli karena analisa atau takut tertinggal harga?"}
+        ...,
+        description="Pesan statis refleksi (Pemula) atau pertanyaan devil's advocate (Expert)",
+        json_schema_extra={"example": "Catatan Panduan: BBCA sangat solid namun harganya premium. Mencicil bertahap (DCA) jauh lebih terukur."},
     )
 
     # --- LEVEL 2: EXPANDED DATA (Zero-Latency Tab) ---

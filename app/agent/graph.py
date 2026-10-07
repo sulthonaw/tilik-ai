@@ -45,12 +45,15 @@ verification_graph = build_verification_graph()
 
 
 async def run_verification(
-    text: str, source_platform: Optional[str] = "x"
+    text: str,
+    source_platform: Optional[str] = "x",
+    user_role: Optional[str] = "PEMULA",
 ) -> VerificationResponse:
     """Executes the verification graph for input social media text."""
     initial_state: AgentState = {
         "raw_text": text,
         "source_platform": source_platform or "x",
+        "user_role": user_role or "PEMULA",
     }
     final_state = await verification_graph.ainvoke(initial_state)
     return final_state["response"]

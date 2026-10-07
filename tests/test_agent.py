@@ -1,11 +1,10 @@
 """Tests for LangGraph agent workflow, nodes, and fallback on upstream API failure."""
 
-import asyncio
 from unittest.mock import AsyncMock, patch
 import httpx
 import pytest
 
-from app.agent.graph import run_verification, verification_graph
+from app.agent.graph import run_verification
 from app.agent.nodes import (
     concurrent_fetch_node,
     evaluator_node,
@@ -13,39 +12,42 @@ from app.agent.nodes import (
     ner_slang_node,
     synthesizer_node,
 )
-from app.models.schemas import VerdictLevel, VerificationResponse
+from app.models.schemas import UserRole, VerdictLevel, VerificationResponse
 from app.models.state import AgentState
 
 
 @pytest.mark.asyncio
-async def test_full_graph_execution_goto(
+async def test_full_graph_execution_goto_pemula(
     mock_sectors_company_report,
     mock_sectors_quarterly,
     mock_sectors_top_brokers,
     mock_sectors_foreign_flow,
     mock_sectors_suspensions_clean,
 ):
-    """Test full LangGraph execution for GOTO with mocked Sectors API responses."""
+    """Test full LangGraph execution for GOTO in PEMULA mode with mocked Sectors API responses."""
     with (
         patch("app.services.sectors_client.SectorsAPIClient.get_company_report", new_callable=AsyncMock) as m_rep,
         patch("app.services.sectors_client.SectorsAPIClient.get_quarterly_financials", new_callable=AsyncMock) as m_q,
         patch("app.services.sectors_client.SectorsAPIClient.get_top_brokers", new_callable=AsyncMock) as m_b,
         patch("app.services.sectors_client.SectorsAPIClient.get_foreign_flow", new_callable=AsyncMock) as m_f,
         patch("app.services.sectors_client.SectorsAPIClient.get_suspensions", new_callable=AsyncMock) as m_s,
+        patch("app.agent.nodes._invoke_gemini", new_callable=AsyncMock) as m_gemini,
     ):
         m_rep.return_value = mock_sectors_company_report
         m_q.return_value = mock_sectors_quarterly
         m_b.return_value = mock_sectors_top_brokers
         m_f.return_value = mock_sectors_foreign_flow
         m_s.return_value = mock_sectors_suspensions_clean
+        m_gemini.return_value = None  # Use deterministic evaluation
 
         tweet = "Si ijo mulai diserok bandar YP di harga gocap, valuasi salah harga to the moon!"
-        res: VerificationResponse = await run_verification(tweet)
+        res: VerificationResponse = await run_verification(tweet, user_role="PEMULA")
 
         assert res.status == "success"
         assert res.ticker == "GOTO"
         assert res.company_name == "GoTo Gojek Tokopedia Tbk"
-        assert res.verdict == VerdictLevel.RED  # High valuation + foreign net sell + manipulative hype
+        assert res.user_role == UserRole.PEMULA
+        assert res.verdict == VerdictLevel.HOAX_BAHAYA  # High valuation + foreign net sell + manipulative hype
         assert res.confidence_score >= 0.8
         assert 1 <= len(res.points) <= 3
         for pt in res.points:
@@ -59,6 +61,44 @@ async def test_full_graph_execution_goto(
         assert res.details.broker_flow.foreign_net_idr < 0
         assert len(res.details.broker_flow.top_buyers) >= 1
         assert res.details.financial_health.is_fca is False
+        assert "Catatan Panduan" in res.cooling_off_prompt
+
+
+@pytest.mark.asyncio
+async def test_full_graph_execution_goto_expert(
+    mock_sectors_company_report,
+    mock_sectors_quarterly,
+    mock_sectors_top_brokers,
+    mock_sectors_foreign_flow,
+    mock_sectors_suspensions_clean,
+):
+    """Test full LangGraph execution for GOTO in EXPERT mode."""
+    with (
+        patch("app.services.sectors_client.SectorsAPIClient.get_company_report", new_callable=AsyncMock) as m_rep,
+        patch("app.services.sectors_client.SectorsAPIClient.get_quarterly_financials", new_callable=AsyncMock) as m_q,
+        patch("app.services.sectors_client.SectorsAPIClient.get_top_brokers", new_callable=AsyncMock) as m_b,
+        patch("app.services.sectors_client.SectorsAPIClient.get_foreign_flow", new_callable=AsyncMock) as m_f,
+        patch("app.services.sectors_client.SectorsAPIClient.get_suspensions", new_callable=AsyncMock) as m_s,
+        patch("app.agent.nodes._invoke_gemini", new_callable=AsyncMock) as m_gemini,
+    ):
+        m_rep.return_value = mock_sectors_company_report
+        m_q.return_value = mock_sectors_quarterly
+        m_b.return_value = mock_sectors_top_brokers
+        m_f.return_value = mock_sectors_foreign_flow
+        m_s.return_value = mock_sectors_suspensions_clean
+        m_gemini.return_value = None
+
+        tweet = "Si ijo mulai diserok bandar YP di harga gocap, valuasi salah harga to the moon!"
+        res: VerificationResponse = await run_verification(tweet, user_role="EXPERT")
+
+        assert res.status == "success"
+        assert res.ticker == "GOTO"
+        assert res.user_role == UserRole.EXPERT
+        assert res.verdict == VerdictLevel.HOAX_BAHAYA
+        assert "Devil's Advocate" in res.cooling_off_prompt
+        # Expert titles check
+        titles = [p.title for p in res.points]
+        assert "Valuasi Relatif" in titles
 
 
 @pytest.mark.asyncio
@@ -85,6 +125,7 @@ async def test_fallback_on_sectors_api_timeout():
             "app.services.sectors_client.SectorsAPIClient.get_suspensions",
             side_effect=httpx.TimeoutException("Timeout"),
         ),
+        patch("app.agent.nodes._invoke_gemini", new_callable=AsyncMock, return_value=None),
     ):
         tweet = "Si ijo diserok bandar YP to the moon"
         res = await run_verification(tweet)
@@ -92,26 +133,27 @@ async def test_fallback_on_sectors_api_timeout():
         # Verification must still succeed using fallbacks, never 500 crash
         assert isinstance(res, VerificationResponse)
         assert res.ticker == "GOTO"
-        assert res.verdict in [VerdictLevel.RED, VerdictLevel.YELLOW, VerdictLevel.GREEN]
+        assert res.verdict in [VerdictLevel.HOAX_BAHAYA, VerdictLevel.WASPADA, VerdictLevel.SESUAI_FAKTA]
         assert len(res.points) >= 1
         assert res.details.valuation.valuation_status is not None
 
 
 @pytest.mark.asyncio
-async def test_fca_stock_verdict_red(
+async def test_fca_stock_verdict_hoax_bahaya(
     mock_sectors_company_report,
     mock_sectors_quarterly,
     mock_sectors_top_brokers,
     mock_sectors_foreign_flow,
     mock_sectors_suspensions_fca,
 ):
-    """Verify that any stock on FCA / Special Monitoring Board receives a RED verdict."""
+    """Verify that any stock on FCA / Special Monitoring Board receives HOAX_BAHAYA verdict."""
     with (
         patch("app.services.sectors_client.SectorsAPIClient.get_company_report", new_callable=AsyncMock) as m_rep,
         patch("app.services.sectors_client.SectorsAPIClient.get_quarterly_financials", new_callable=AsyncMock) as m_q,
         patch("app.services.sectors_client.SectorsAPIClient.get_top_brokers", new_callable=AsyncMock) as m_b,
         patch("app.services.sectors_client.SectorsAPIClient.get_foreign_flow", new_callable=AsyncMock) as m_f,
         patch("app.services.sectors_client.SectorsAPIClient.get_suspensions", new_callable=AsyncMock) as m_s,
+        patch("app.agent.nodes._invoke_gemini", new_callable=AsyncMock, return_value=None),
     ):
         m_rep.return_value = mock_sectors_company_report
         m_q.return_value = mock_sectors_quarterly
@@ -122,7 +164,7 @@ async def test_fca_stock_verdict_red(
         tweet = "Beli GOTO sekarang prospek cerah!"
         res = await run_verification(tweet)
 
-        assert res.verdict == VerdictLevel.RED
+        assert res.verdict == VerdictLevel.HOAX_BAHAYA
         assert res.details.financial_health.is_fca is True
 
 
@@ -138,6 +180,7 @@ async def test_agent_node_state_transitions(
     initial_state: AgentState = {
         "raw_text": "Saham paman ditarik ke langit",
         "source_platform": "x",
+        "user_role": "PEMULA",
     }
 
     # Node 1
@@ -157,6 +200,7 @@ async def test_agent_node_state_transitions(
         patch("app.services.sectors_client.SectorsAPIClient.get_top_brokers", new_callable=AsyncMock) as m_b,
         patch("app.services.sectors_client.SectorsAPIClient.get_foreign_flow", new_callable=AsyncMock) as m_f,
         patch("app.services.sectors_client.SectorsAPIClient.get_suspensions", new_callable=AsyncMock) as m_s,
+        patch("app.agent.nodes._invoke_gemini", new_callable=AsyncMock, return_value=None),
     ):
         m_rep.return_value = mock_sectors_company_report
         m_q.return_value = mock_sectors_quarterly
@@ -172,7 +216,11 @@ async def test_agent_node_state_transitions(
         state_after_fetch = {**state_after_intent, **fetch_out}
         eval_out = await evaluator_node(state_after_fetch)
         assert "evaluation" in eval_out
-        assert eval_out["evaluation"]["verdict"] in [VerdictLevel.RED, VerdictLevel.YELLOW, VerdictLevel.GREEN]
+        assert eval_out["evaluation"]["verdict"] in [
+            VerdictLevel.HOAX_BAHAYA,
+            VerdictLevel.WASPADA,
+            VerdictLevel.SESUAI_FAKTA,
+        ]
 
         # Node 5
         state_after_eval = {**state_after_fetch, **eval_out}

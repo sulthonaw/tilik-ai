@@ -18,6 +18,11 @@ Backend service berbasis **FastAPI**, **LangGraph**, dan **Google Gemini** yang 
      python -m venv venv
      .\venv\Scripts\Activate.ps1
      ```
+   * Windows (Git Bash):
+     ```bash
+     python -m venv venv
+     source venv/Scripts/activate
+     ```
    * Linux / macOS:
      ```bash
      python3 -m venv venv
@@ -34,7 +39,7 @@ Backend service berbasis **FastAPI**, **LangGraph**, dan **Google Gemini** yang 
    ```
 5. **Jalankan Server:**
    ```bash
-   uvicorn app.main:app --reload --port 8000
+   python -m uvicorn app.main:app --reload --port 8000
    ```
    Akses dokumentasi Swagger UI di: `http://localhost:8000/docs`
 

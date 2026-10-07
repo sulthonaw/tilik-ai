@@ -12,6 +12,7 @@ class AgentState(TypedDict, total=False):
     # Input parameters
     raw_text: str
     source_platform: Optional[str]
+    user_role: Optional[str]
 
     # Node 1: NER & Slang Resolution
     slang_candidates: List[Dict[str, Any]]

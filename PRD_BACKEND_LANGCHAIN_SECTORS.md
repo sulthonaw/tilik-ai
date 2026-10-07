@@ -7,7 +7,7 @@
 > **Document Status:** Approved & Revised (Ready for Development)  
 > **Version:** 2.0.0  
 > **Target Release:** Sectors Hackathon 2026 (Track: AI Agents & Assistants / Reason)  
-> **Engine Stack:** Python 3.11+ | FastAPI | LangGraph 0.2+ | Google Gemini (`gemini-2.5-flash`) | ChromaDB / FAISS (Slang RAG) | Sectors API v2 | Pydantic v2  
+> **Engine Stack:** Python 3.11+ | FastAPI | LangGraph 0.2+ | Google Gemini (`gemini-2.0-flash`) | ChromaDB / FAISS (Slang RAG) | Sectors API v2 | Pydantic v2  
 > **Environment & Deployment:** Local Virtualenv (`venv`) & Docker (`Dockerfile` + `docker-compose.yml`)  
 
 ---
@@ -289,9 +289,9 @@ from typing import List, Optional, Dict, Any
 from enum import Enum
 
 class VerdictLevel(str, Enum):
-    RED = "RED"          # Klaim palsu / Hype manipulatif / Valuasi ekstrem / Papan FCA
-    YELLOW = "YELLOW"    # Fakta separuh / Ada risiko tersembunyi
-    GREEN = "GREEN"      # Klaim terkonfirmasi data fundamental riil
+    HOAX_BAHAYA = "HOAX_BAHAYA"      # 🔴 HOAX / BAHAYA: Klaim bohong, pom-pom manipulatif, atau saham bertato suspensi
+    WASPADA = "WASPADA"              # 🟡 WASPADA: Ada fakta tersembunyi/separuh benar, atau harga kemahalan/premium, jangan buru-buru
+    SESUAI_FAKTA = "SESUAI_FAKTA"    # 🟢 SESUAI FAKTA: Informasi valid dan fundamental terbukti sehat
 
 # LEVEL 1: Summary Facts (Maksimal 25 kata per poin)
 class FactCheckPoint(BaseModel):
@@ -330,21 +330,28 @@ class ExpandedDetails(BaseModel):
     broker_flow: BrokerFlowDetail
     financial_health: FinancialHealthDetail
 
+# ENUM ROLE PENGGUNA
+class UserRole(str, Enum):
+    PEMULA = "PEMULA"    # Bahasa santai, analogi sederhana, cooling-off sebagai pesan statis protektif
+    EXPERT = "EXPERT"    # Bahasa teknis padat, istilah industri, devil's advocate prompt
+
 # REQUEST & RESPONSE UNIFIED
 class VerifyTweetRequest(BaseModel):
     text: str = Field(..., min_length=5, max_length=1000, example="Si ijo mulai diserok bandar YP, valuasi salah harga to the moon!")
     source_platform: Optional[str] = Field("x", example="x | threads | telegram")
+    user_role: UserRole = Field(UserRole.PEMULA, description="Mode tampilan dan bahasa. Ditetapkan dari pengaturan onboarding pengguna.")
 
 class VerificationResponse(BaseModel):
     status: str = Field("success", example="success")
     ticker: Optional[str] = Field(None, example="GOTO")
     company_name: Optional[str] = Field(None, example="GoTo Gojek Tokopedia Tbk")
+    user_role: UserRole = Field(..., description="Role yang digunakan saat request — di-echo kembali untuk kebutuhan UI rendering")
     
     # --- LEVEL 1: SUMMARY CARD ---
     verdict: VerdictLevel = Field(..., description="Status lampu lalu lintas")
     confidence_score: float = Field(..., ge=0.0, le=1.0, example=0.94)
     points: List[FactCheckPoint] = Field(..., min_length=1, max_length=3)
-    cooling_off_prompt: str = Field(..., example="Tarik napas 5 detik! Yakin membeli karena analisa atau takut tertinggal harga?")
+    cooling_off_prompt: str = Field(..., description="Pesan statis refleksi (Pemula) atau pertanyaan devil's advocate (Expert)")
     
     # --- LEVEL 2: EXPANDED DATA (Zero-Latency Tab) ---
     details: ExpandedDetails
@@ -354,6 +361,29 @@ class VerificationResponse(BaseModel):
 
 ---
 
+
+### 6.1 Arsitektur Level 2: Pure Deterministic Data (Tanpa AI)
+> ⚠️ **PRINSIP DESAIN LEVEL 2 (LIHAT DETAIL DATA):**  
+> Data di Level 2 **SAMA SEKALI TIDAK MENGGUNAKAN AI**. Level 2 menyajikan data keuangan mentah terstruktur yang dipass-through langsung dari Sectors API v2 ke antarmuka Android.  
+> **Keunggulan:**  
+> 1. **Nol Halusinasi:** 100% angka resmi bursa (PBV, PER, Broker net value, laba kuartalan).  
+> 2. **Zero Latency:** Tampil seketika tanpa jeda pemrosesan LLM.  
+> 3. **Hemat Biaya Token:** 0 token Gemini digunakan untuk merender data detail.
+
+#### 4 Kotak Data Utama Level 2:
+1. **Kotak Valuasi (Kewajaran Harga vs Sektor):**
+   * PBV & PER Emiten vs Median Sektor (dihitung deterministik dari array `peers`).
+   * Tabel komparasi 3 emiten sejenis (*peer comparison*).
+2. **Kotak Arus Transaksi (Bandar & Asing):**
+   * Total arus dana bersih asing hari ini (`foreign_net_idr`).
+   * Top 3–5 broker pembeli (*buyers*) & penjual (*sellers*) beserta net value dan klasifikasi (Institusi vs Ritel).
+3. **Kotak Kinerja Keuangan (Laba & Pendapatan Kuartalan):**
+   * Laba bersih kuartal terakhir (`earnings`) dan pertumbuhan YoY.
+   * Pendapatan kuartal terakhir (`revenue`) dan arus kas operasional (`operating_cash_flow`).
+4. **Kotak Keamanan Bursa:**
+   * Status suspensi resmi bursa (`results` dari `/v2/suspensions/`).
+   * Papan pencatatan emiten (`listing_board` dari `/v2/company/report/`).
+
 ## 7. SPESIFIKASI ENDPOINT API (FASTAPI)
 
 ### 7.1 `POST /api/v1/verify`
@@ -361,13 +391,14 @@ class VerificationResponse(BaseModel):
 * **Method:** `POST`
 * **Headers:** `Content-Type: application/json`
 * **Request Payload:** `VerifyTweetRequest`
-* **Response 200 OK Payload:**
+* **Response 200 OK (Contoh Mode PEMULA):**
 ```json
 {
   "status": "success",
   "ticker": "BBCA",
   "company_name": "Bank Central Asia Tbk",
-  "verdict": "YELLOW",
+  "user_role": "PEMULA",
+  "verdict": "WASPADA",
   "confidence_score": 0.92,
   "points": [
     {
@@ -386,7 +417,7 @@ class VerificationResponse(BaseModel):
       "is_favorable": true
     }
   ],
-  "cooling_off_prompt": "Tarik napas 5 detik! BBCA sangat solid dan didukung dana asing, tetapi harganya sedang di level premium. Lebih bijak membeli bertahap (mencicil) daripada terburu-buru all-in!",
+  "cooling_off_prompt": "Catatan Panduan: BBCA sangat solid dan didukung aliran dana institusi besar, namun valuasinya berada di batas atas industri. Mencicil bertahap (DCA) jauh lebih terukur dibanding pembelian agresif sekaligus.",
   "details": {
     "valuation": {
       "pe_ratio": 22.4,
@@ -418,6 +449,64 @@ class VerificationResponse(BaseModel):
 }
 ```
 
+* **Response 200 OK (Contoh Mode EXPERT - Level 1 Padat & Devil's Advocate):**
+```json
+{
+  "status": "success",
+  "ticker": "BBCA",
+  "company_name": "Bank Central Asia Tbk",
+  "user_role": "EXPERT",
+  "verdict": "WASPADA",
+  "confidence_score": 0.92,
+  "points": [
+    {
+      "title": "Valuasi Relatif",
+      "fact": "PBV 2.4x (premium 45.5% vs median sektor 1.65x); trailing PE 22.4x vs industri 18.5x.",
+      "is_favorable": false
+    },
+    {
+      "title": "Arus Transaksi Asing",
+      "fact": "Net foreign inflow +Rp429.7B; konsentrasi top buyers institusional DX dan YU.",
+      "is_favorable": true
+    },
+    {
+      "title": "Listing & Kepatuhan",
+      "fact": "Main Board IDX, non-FCA, nihil notasi khusus bursa.",
+      "is_favorable": true
+    }
+  ],
+  "cooling_off_prompt": "Devil's Advocate: OCF kuartalan tercatat -Rp15.6T meski laba bersih tumbuh +12.4% YoY. Apakah thesis Anda telah memisahkan ekspansi kredit wajar perbankan dari risiko kenaikan pencadangan NPL?",
+  "details": {
+    "valuation": {
+      "pe_ratio": 22.4,
+      "pbv_ratio": 2.4,
+      "industry_median_pe": 18.5,
+      "industry_median_pbv": 1.65,
+      "valuation_status": "Premium 45.5% vs Median Industri"
+    },
+    "broker_flow": {
+      "foreign_net_idr": 429706960000.0,
+      "top_buyers": [
+        {"broker_code": "DX", "broker_type": "Institusi", "net_value_idr": 15200000000.0, "action": "NET_BUY"},
+        {"broker_code": "YU", "broker_type": "Institusi", "net_value_idr": 15200000000.0, "action": "NET_BUY"}
+      ],
+      "top_sellers": [
+        {"broker_code": "BK", "broker_type": "Asing / Institusi", "net_value_idr": 24100000000.0, "action": "NET_SELL"},
+        {"broker_code": "AK", "broker_type": "Asing / Institusi", "net_value_idr": 24100000000.0, "action": "NET_SELL"}
+      ],
+      "summary_verdict": "Net foreign inflow +Rp429.7B dominasi akumulasi institusi"
+    },
+    "financial_health": {
+      "net_profit_growth_yoy": 12.4,
+      "operating_cash_flow_idr": -15658754000000.0,
+      "is_fca": false,
+      "special_notations": []
+    }
+  },
+  "is_cached": false
+}
+```
+
 ### 7.2 `GET /api/v1/health`
 * **Path:** `/api/v1/health`
 * **Response 200 OK:**
@@ -437,34 +526,35 @@ class VerificationResponse(BaseModel):
 
 ---
 
-## 8. PANDUAN TONE OF VOICE & PROMPT RAMAH PEMULA (HUMAN-CENTERED FINANCIAL LANGUAGE)
+### 8. PANDUAN TONE OF VOICE & ARSITEKTUR MULTI-ROLE (HUMAN-CENTERED FINANCIAL LANGUAGE)
 
-Tilik AI dirancang untuk memecahkan kesenjangan literasi keuangan Indonesia (hanya 17,78%). Oleh karena itu, **dilarang keras menggunakan bahasa analis teknis mentah** yang membingungkan pemula. Modul `app/agent/prompts.py` wajib menerapkan 4 pilar tata bahasa berikut:
+Tilik AI dirancang untuk memecahkan kesenjangan literasi keuangan Indonesia (hanya 17,78%). Bahasa luaran AI disesuaikan secara adaptif berdasarkan nilai `user_role` pada permintaan (`PEMULA` atau `EXPERT`). Modul `app/agent/prompts.py` mengelola blueprint prompt khusus untuk masing-masing profil pengguna:
 
-### 8.1 Empat Pilar "Bahasa Manusiawi"
+### 8.1 Komparasi Karakteristik Antar Role
+
+| Aspek | Mode PEMULA | Mode EXPERT |
+| :--- | :--- | :--- |
+| **Gaya Bahasa Fakta** | Analogi sederhana, naratif santai, bebas jargon mentah | Presisi tinggi, ringkas, istilah baku bursa (PE, PBV, OCF) |
+| **Contoh Uraian Valuasi** | *"Harga 2,4x lipat dari modal bersihnya, 45% lebih mahal dibanding rata-rata bank lain"* | *"PBV 2.4x (premium 45% vs median sektor 1.65x); PE 22.4x vs median 18.5x"* |
+| **Contoh Uraian Broker Flow** | *"Investor luar negeri sedang banyak masuk ratusan miliar hari ini"* | *"Net foreign inflow +Rp429.7B; didorong broker institusi DX & YU; YP net sell"* |
+| **Sifat Cooling-Off / Alert** | **Pesan Statis Protektif** (selalu tampil mendidik, bukan countdown/timer) | **Devil's Advocate Prompt** (pertanyaan penantang tesis/anomali data) |
+| **Contoh Cooling-Off / Alert** | *"Perusahaannya bagus, tetapi harganya sedang mahal. Beli bertahap lebih aman daripada terburu-buru."* | *"OCF negatif Rp15.6T meski laba naik 12% YoY. Ekspansi kredit normal atau ada penurunan kualitas aset?"* |
+| **Peran Slang RAG** | Menerjemahkan bahasa gaul agar pemula paham konteks narasi | Ekstraksi ticker presisi dari kerumunan *social noise* & cashtags |
+
+### 8.2 Pedoman Bahasa Manusiawi untuk Mode PEMULA
 1. **Prinsip "Analogi Warung" (No Naked Jargon):**
-   * ❌ *Dilarang:* "PBV emiten 2.4x, berada 45% lebih tinggi dari median sektor."
-   * ✅ *Wajib:* "Harga Tergolong Premium: Saat ini dihargai 2,4x lipat dari modal bersihnya, 45% lebih tinggi dibanding rata-rata saham bank lain (1,6x)."
-   * ❌ *Dilarang:* "Saham masuk Papan Pemantauan Khusus (FCA)."
-   * ✅ *Wajib:* "Perhatian Khusus: Saham ini sedang dipantau ketat bursa karena likuiditas rendah atau masalah kinerja."
+   * Jelaskan arti dari angka, bukan sekadar menyebut nama rasio.
+   * `PBV 2.4x` dijelaskan sebagai *"Dihargai 2,4x dari modal bersihnya"*.
 2. **Kesesuaian Angka & Narasi Mutlak (Zero Hallucination):**
-   * Poin teks di Level 1 WAJIB membaca kalkulasi riil dari Level 2:
-     - Jika `foreign_net_idr` positif besar (> Rp 10M), narasi WAJIB berbunyi: *"Investor Asing Borong Besar"*, dilarang menaruh template ritel YP.
-     - Jika `foreign_net_idr` negatif, narasi berbunyi: *"Asing Jualan Bersih"*.
-3. **Cooling-Off Prompt yang Kontekstual & Empatik:**
-   * Jangan gunakan kalimat template yang sama untuk semua cuitan.
-   * **Jika cuitan berupa Pertanyaan / Kegalauan Entry** (*"worth it ga dibeli sekarang apa tunggu drop?"*):
-     $
-ightarrow$ Berikan saran manajemen risiko dan psikologis: *"Tarik napas 5 detik! Perusahaannya solid & didukung asing, tapi valuasinya sedang di level premium. Lebih aman membeli bertahap (mencicil) daripada buru-buru all-in!"*
-   * **Jika cuitan berupa Hype / Pom-Pom** (*"Serok sekarang to the moon!"*):
-     $
-ightarrow$ Berikan peringatan risiko cuci piring: *"Tarik napas 5 detik! Kenaikan harga didominasi ritel yang panik, bukan akumulasi dana besar. Hati-hati risiko menanggung rugi di harga pucuk!"*
-4. **Konteks Khusus Sektor Finansial & Perbankan:**
-   * Pada laporan perbankan (seperti BBCA, BBRI, BMRI), *operating cash flow* sering tercatat negatif di periode ekspansi karena pengeluaran kredit nasabah. Sistem harus menginstruksikan Gemini untuk TIDAK mengklaim bank rugi jika laba bersih (*net profit*) tumbuh sehat.
+   * Teks di Level 1 wajib merefleksikan nilai riil di Level 2 (`foreign_net_idr` positif harus dinyatakan akumulasi dana asing, dilarang memakai template ritel YP).
+3. **Pesan Refleksi Statis (Bukan Countdown Timer):**
+   * Tidak memakai penghitung waktu buatan yang mengganggu alur. Menampilkan pesan statis yang relevan dengan tipe cuitan (pertanyaan entry vs klaim pom-pom).
+4. **Konteks Khusus Saham Perbankan:**
+   * Di sektor perbankan, OCF negatif pada fase ekspansi kredit adalah hal lumrah. Sistem dilarang menyimpulkan kinerja bank buruk selama laba bersih bertumbuh sehat.
 
-### 8.2 Blueprint Prompt Generator (`app/agent/prompts.py`)
+### 8.3 Blueprint Generator Prompt (`app/agent/prompts.py`)
 ```python
-SYNTHESIZER_SYSTEM_PROMPT = """
+SYNTHESIZER_SYSTEM_PROMPT_PEMULA = """
 Anda adalah Tilik AI, asisten pelindung investor pemula dari FOMO dan manipulasi pasar modal Indonesia (IDX).
 Tugas Anda adalah merangkum data bursa resmi dari Sectors API menjadi kartu verifikasi yang SANGAT MUDAH DIPAHAMI OLEH PEMULA.
 
@@ -477,11 +567,35 @@ PEDOMAN TONE OF VOICE (WAJIB DIPATUHI):
 2. SINKRONISASI DATA RIIL:
    - Jika foreign_net_idr POSITIF: nyatakan asing sedang memborong/akumulasi.
    - Jika foreign_net_idr NEGATIF: nyatakan asing sedang melakukan aksi jual bersih.
-3. COOLING-OFF PROMPT KONTEKSTUAL:
-   - Jika pengguna ragu/bertanya entry: sarankan beli bertahap (DCA) atau tunggu momentum.
+3. PESAN REFLEKSI STATIS KONTEKSTUAL:
+   - Jika cuitan bernada ragu/bertanya entry: sarankan beli bertahap (DCA) atau tunggu momentum diskon.
    - Jika cuitan bernada pom-pom: ingatkan bahaya FOMO di harga pucuk.
+   - Selalu tampilkan sebagai catatan panduan statis yang menenangkan.
 4. MAKSIMAL 25 KATA PER POIN FAKTA: Padat, akurat, dan menenangkan psikologi pengguna.
 """
+
+SYNTHESIZER_SYSTEM_PROMPT_EXPERT = """
+Anda adalah Tilik AI dalam mode Expert — alat validasi data cepat untuk analis dan investor berpengalaman.
+Tugas Anda adalah menyajikan data bursa resmi dari Sectors API secara PADAT, TEKNIS, dan EFISIEN.
+
+PEDOMAN TONE OF VOICE (WAJIB DIPATUHI):
+1. TERMINOLOGI INDUSTRI STANDAR:
+   - Gunakan istilah baku: PBV, PE, net foreign inflow/outflow, OCF, YoY, broker flow.
+   - Langsung sebutkan angka dan deviasi vs benchmark industri tanpa parafrase panjang.
+2. SINKRONISASI DATA RIIL MUTLAK:
+   - Sajikan pergerakan dana institusi dan net foreign flow sesuai kalkulasi nominal aktual.
+3. DEVIL'S ADVOCATE PROMPT (PENANTANG TESIS):
+   - Jangan berikan nasihat emosional/protektif pemula.
+   - Ajukan satu pertanyaan kritis yang menyoroti kontradiksi atau anomali data keuangan.
+   - Contoh: 'OCF negatif Rp15.6T meski laba naik 12% YoY. Ekspansi kredit normal atau penurunan kualitas aset?'
+4. MAKSIMAL 20 KATA PER POIN FAKTA: Padat, berbasis metrik, bebas basa-basi.
+"""
+
+def get_synthesizer_prompt(user_role: str) -> str:
+    """Mengembalikan system prompt yang sesuai dengan preferensi role pengguna."""
+    if user_role == "EXPERT":
+        return SYNTHESIZER_SYSTEM_PROMPT_EXPERT
+    return SYNTHESIZER_SYSTEM_PROMPT_PEMULA
 ```
 
 ## 9. TEKNOLOGI & DEPENDENSI (`requirements.txt`)
