@@ -69,6 +69,9 @@ class ExpandedDetails(BaseModel):
     financial_health: FinancialHealthDetail
 
 
+from pydantic import BaseModel, Field, field_validator
+
+
 # REQUEST & RESPONSE UNIFIED
 class VerifyTweetRequest(BaseModel):
     text: str = Field(
@@ -78,10 +81,21 @@ class VerifyTweetRequest(BaseModel):
         json_schema_extra={"example": "Si ijo mulai diserok bandar YP, valuasi salah harga to the moon!"},
     )
     source_platform: Optional[str] = Field("x", json_schema_extra={"example": "x | threads | telegram"})
-    user_role: UserRole = Field(
-        UserRole.PEMULA,
-        description="Mode tampilan dan bahasa. Ditetapkan dari pengaturan onboarding pengguna.",
+    user_role: Optional[UserRole] = Field(
+        default=None,
+        description="Mode tampilan dan bahasa. Jika None, otomatis menggunakan settingan profil user yang login atau PEMULA untuk guest.",
     )
+
+    @field_validator("user_role", mode="before")
+    @classmethod
+    def normalize_user_role(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, str):
+            v_clean = v.strip().upper()
+            if v_clean in ["PEMULA", "EXPERT"]:
+                return UserRole(v_clean)
+        return v
 
 
 class VerificationResponse(BaseModel):
@@ -129,6 +143,20 @@ class UserPayload(BaseModel):
     name: Optional[str] = Field(None, description="Nama lengkap pengguna")
     picture: Optional[str] = Field(None, description="URL avatar Google profile")
     google_id: str = Field(..., description="Identitas unik Google pengguna (sub claim)")
+    user_role: UserRole = Field(UserRole.PEMULA, description="Preferensi role pengguna: PEMULA atau EXPERT")
+
+
+class UserSettingsUpdate(BaseModel):
+    user_role: UserRole = Field(..., description="Pilihan mode tampilan: PEMULA atau EXPERT")
+
+    @field_validator("user_role", mode="before")
+    @classmethod
+    def normalize_user_role(cls, v):
+        if isinstance(v, str):
+            v_clean = v.strip().upper()
+            if v_clean in ["PEMULA", "EXPERT"]:
+                return UserRole(v_clean)
+        return v
 
 
 class AuthResponse(BaseModel):

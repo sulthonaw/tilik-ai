@@ -122,6 +122,9 @@ def verify_google_id_token(token_str: str) -> dict:
         raise ValueError(f"Token Google tidak valid atau kedaluwarsa: {str(e)}")
 
 
+from app.services.user_service import user_service
+
+
 async def get_current_user_optional(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_bearer_optional),
 ) -> Optional[UserPayload]:
@@ -131,11 +134,14 @@ async def get_current_user_optional(
     payload = decode_access_token(credentials.credentials)
     if not payload or "sub" not in payload:
         return None
+    google_id = payload.get("sub", "")
+    current_role = user_service.get_user_role(google_id)
     return UserPayload(
         email=payload.get("email", ""),
         name=payload.get("name"),
         picture=payload.get("picture"),
-        google_id=payload.get("sub", ""),
+        google_id=google_id,
+        user_role=current_role,
     )
 
 
