@@ -1,4 +1,4 @@
-"""Asynchronous Client for communicating with Sectors API v2."""
+"""Asynchronous Client for communicating with Sectors API v2 with Redis/In-Memory credit caching."""
 
 import logging
 import time
@@ -6,13 +6,14 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
+from app.core.cache import cache
 from app.core.config import settings
 
 logger = logging.getLogger("sectors_client")
 
 
 class SectorsAPIClient:
-    """Asynchronous Client untuk komunikasi dengan Sectors API v2."""
+    """Asynchronous Client untuk komunikasi dengan Sectors API v2 dengan optimasi kredit via Caching."""
 
     def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None):
         self.base_url = (base_url or settings.SECTORS_API_BASE_URL).rstrip("/")
@@ -124,27 +125,62 @@ class SectorsAPIClient:
         return resp.json()
 
     async def get_company_report(
-        self, symbol: str, sections: str = "overview,valuation,financials,peers"
+        self,
+        symbol: str,
+        sections: str = "overview,valuation,financials,peers",
+        use_cache: bool = True,
     ) -> Dict[str, Any]:
-        """Mengambil laporan ringkas emiten dengan optimasi 4 credits."""
-        url = f"{self.base_url}/v2/company/report/{symbol.upper()}/"
+        """Mengambil laporan ringkas emiten dengan optimasi 4 credits dan cache TTL 24 jam."""
+        sym = symbol.upper()
+        cache_key = f"sectors:company_report:{sym}:{sections}"
+
+        if use_cache:
+            cached_val = cache.get(cache_key)
+            if cached_val is not None:
+                logger.info(f"[SectorsCache] HIT: {cache_key} (Hemat 4 credits!)")
+                return cached_val
+
+        url = f"{self.base_url}/v2/company/report/{sym}/"
         resp = await self._request("GET", url, params={"sections": sections})
-        return resp.json()
+        data = resp.json()
+
+        if use_cache and data:
+            cache.set(cache_key, data, ttl=settings.CACHE_TTL_COMPANY_REPORT)
+
+        return data
 
     async def get_quarterly_financials(
-        self, symbol: str, n_quarters: int = 4
+        self,
+        symbol: str,
+        n_quarters: int = 4,
+        use_cache: bool = True,
     ) -> List[Dict[str, Any]]:
-        """Mengambil laporan keuangan kuartalan (biaya 1 credit)."""
-        url = f"{self.base_url}/v2/financials/quarterly/{symbol.upper()}/"
+        """Mengambil laporan keuangan kuartalan (biaya 1-4 credits) dan cache TTL 24 jam."""
+        sym = symbol.upper()
+        cache_key = f"sectors:quarterly:{sym}:{n_quarters}"
+
+        if use_cache:
+            cached_val = cache.get(cache_key)
+            if cached_val is not None:
+                logger.info(f"[SectorsCache] HIT: {cache_key} (Hemat 4 credits!)")
+                return cached_val
+
+        url = f"{self.base_url}/v2/financials/quarterly/{sym}/"
         resp = await self._request(
             "GET", url, params={"n_quarters": n_quarters, "approx": "true"}
         )
-        data = resp.json()
-        if isinstance(data, list):
-            return data
-        elif isinstance(data, dict) and "data" in data:
-            return data["data"]
-        return []
+        raw_data = resp.json()
+        if isinstance(raw_data, list):
+            result = raw_data
+        elif isinstance(raw_data, dict) and "data" in raw_data:
+            result = raw_data["data"]
+        else:
+            result = []
+
+        if use_cache and result:
+            cache.set(cache_key, result, ttl=settings.CACHE_TTL_QUARTERLY_FINANCIALS)
+
+        return result
 
     async def get_top_brokers(
         self,
@@ -152,45 +188,112 @@ class SectorsAPIClient:
         n_brokers: int = 10,
         start: Optional[str] = None,
         end: Optional[str] = None,
+        use_cache: bool = True,
     ) -> Dict[str, Any]:
-        """Mengambil ringkasan Top Buyers dan Top Sellers broker (biaya 1 credit)."""
-        url = f"{self.base_url}/v2/broker-summary/{symbol.upper()}/top/"
+        """Mengambil ringkasan Top Buyers dan Top Sellers broker (biaya 2 credits) dan cache TTL 30 menit."""
+        sym = symbol.upper()
+        cache_key = f"sectors:top_brokers:{sym}:{n_brokers}:{start or ''}:{end or ''}"
+
+        if use_cache:
+            cached_val = cache.get(cache_key)
+            if cached_val is not None:
+                logger.info(f"[SectorsCache] HIT: {cache_key} (Hemat 2 credits!)")
+                return cached_val
+
+        url = f"{self.base_url}/v2/broker-summary/{sym}/top/"
         params: Dict[str, Any] = {"n_brokers": n_brokers}
         if start:
             params["start"] = start
         if end:
             params["end"] = end
         resp = await self._request("GET", url, params=params)
-        return resp.json()
+        data = resp.json()
+
+        if use_cache and data:
+            cache.set(cache_key, data, ttl=settings.CACHE_TTL_BROKER_SUMMARY)
+
+        return data
 
     async def get_foreign_flow(
         self,
         symbol: str,
         start: Optional[str] = None,
         end: Optional[str] = None,
+        use_cache: bool = True,
     ) -> Dict[str, Any]:
-        """Mengambil arus dana investor asing harian (biaya 1 credit)."""
-        url = f"{self.base_url}/v2/foreign-flow/{symbol.upper()}/"
+        """Mengambil arus dana investor asing harian (biaya 1 credit) dan cache TTL 30 menit."""
+        sym = symbol.upper()
+        cache_key = f"sectors:foreign_flow:{sym}:{start or ''}:{end or ''}"
+
+        if use_cache:
+            cached_val = cache.get(cache_key)
+            if cached_val is not None:
+                logger.info(f"[SectorsCache] HIT: {cache_key} (Hemat 1 credit!)")
+                return cached_val
+
+        url = f"{self.base_url}/v2/foreign-flow/{sym}/"
         params: Dict[str, Any] = {}
         if start:
             params["start"] = start
         if end:
             params["end"] = end
         resp = await self._request("GET", url, params=params)
-        return resp.json()
+        data = resp.json()
 
-    async def get_suspensions(self, symbol: str) -> Dict[str, Any]:
-        """Mengecek apakah saham sedang disuspensi / notasi khusus oleh BEI."""
+        if use_cache and data:
+            cache.set(cache_key, data, ttl=settings.CACHE_TTL_FOREIGN_FLOW)
+
+        return data
+
+    async def get_suspensions(
+        self,
+        symbol: str,
+        use_cache: bool = True,
+    ) -> Dict[str, Any]:
+        """Mengecek apakah saham sedang disuspensi / notasi khusus oleh BEI (biaya 1 credit) dan cache TTL 2 jam."""
+        sym = symbol.upper()
+        cache_key = f"sectors:suspensions:{sym}"
+
+        if use_cache:
+            cached_val = cache.get(cache_key)
+            if cached_val is not None:
+                logger.info(f"[SectorsCache] HIT: {cache_key} (Hemat 1 credit!)")
+                return cached_val
+
         url = f"{self.base_url}/v2/suspensions/"
         resp = await self._request(
-            "GET", url, params={"symbol": symbol.upper(), "limit": 5}
+            "GET", url, params={"symbol": sym, "limit": 5}
         )
-        return resp.json()
+        data = resp.json()
 
-    async def get_filings(self, symbol: str, limit: int = 5) -> Dict[str, Any]:
-        """Mengambil keterbukaan informasi dan aksi insider trading emiten."""
+        if use_cache and data:
+            cache.set(cache_key, data, ttl=settings.CACHE_TTL_SUSPENSIONS)
+
+        return data
+
+    async def get_filings(
+        self,
+        symbol: str,
+        limit: int = 5,
+        use_cache: bool = True,
+    ) -> Dict[str, Any]:
+        """Mengambil keterbukaan informasi dan aksi insider trading emiten dan cache TTL 2 jam."""
+        sym = symbol.upper()
+        cache_key = f"sectors:filings:{sym}:{limit}"
+
+        if use_cache:
+            cached_val = cache.get(cache_key)
+            if cached_val is not None:
+                logger.info(f"[SectorsCache] HIT: {cache_key} (Hemat 1 credit!)")
+                return cached_val
+
         url = f"{self.base_url}/v2/filings/"
         resp = await self._request(
-            "GET", url, params={"symbol": symbol.upper(), "limit": limit}
+            "GET", url, params={"symbol": sym, "limit": limit}
         )
-        return resp.json()
+        data = resp.json()
+
+        if use_cache and data:
+            cache.set(cache_key, data, ttl=7200)
+
+        return data

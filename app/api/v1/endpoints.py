@@ -87,6 +87,9 @@ async def get_health() -> HealthResponse:
     sectors_key = settings.SECTORS_API_KEY
     sectors_status = "connected" if sectors_key else "connected"  # Connected default
 
+    # Verify Cache backend status
+    cache_backend = "redis" if cache.is_redis_active else "in_memory"
+
     return HealthResponse(
         status="healthy",
         app_name=settings.APP_NAME,
@@ -94,4 +97,5 @@ async def get_health() -> HealthResponse:
         gemini_api=gemini_status,
         sectors_api=sectors_status,
         slang_rag_records=records_count,
+        cache_backend=cache_backend,
     )

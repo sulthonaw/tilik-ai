@@ -116,3 +116,4 @@ class HealthResponse(BaseModel):
     gemini_api: str = Field("connected", json_schema_extra={"example": "connected"})
     sectors_api: str = Field("connected", json_schema_extra={"example": "connected"})
     slang_rag_records: int = Field(0, json_schema_extra={"example": 52})
+    cache_backend: str = Field("in_memory", json_schema_extra={"example": "redis | in_memory"})

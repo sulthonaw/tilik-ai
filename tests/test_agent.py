@@ -227,3 +227,32 @@ async def test_agent_node_state_transitions(
         synth_out = await synthesizer_node(state_after_eval)
         assert "response" in synth_out
         assert isinstance(synth_out["response"], VerificationResponse)
+
+
+@pytest.mark.asyncio
+async def test_sectors_client_caching_credit_saver():
+    """Verify that SectorsAPIClient caches responses per symbol and prevents repeated credit deductions."""
+    from app.core.cache import cache
+    from app.services.sectors_client import SectorsAPIClient
+
+    cache.clear()
+    client = SectorsAPIClient(api_key="mock_key")
+
+    mock_resp = {"symbol": "GOTO", "overview": {"sector": "Tech"}, "valuation": {"pb_ratio": 2.4}}
+
+    with patch.object(client, "_request", new_callable=AsyncMock) as m_req:
+        from unittest.mock import MagicMock
+        mock_http_resp = MagicMock()
+        mock_http_resp.json.return_value = mock_resp
+        m_req.return_value = mock_http_resp
+
+        # First call -> cache miss, triggers HTTP request (4 credits)
+        data1 = await client.get_company_report("GOTO")
+        assert data1 == mock_resp
+        assert m_req.call_count == 1
+
+        # Second call for the same symbol -> CACHE HIT! Zero HTTP requests (0 credits consumed!)
+        data2 = await client.get_company_report("GOTO")
+        assert data2 == mock_resp
+        assert m_req.call_count == 1  # Call count remains 1, did not hit upstream API!
+

@@ -41,9 +41,18 @@ class Settings(BaseSettings):
     SLANG_CSV_PATH: str = str(ROOT_DIR / "data" / "slang_dictionary.csv")
     CHROMA_PERSIST_DIR: str = str(ROOT_DIR / "data" / "chroma_db")
 
-    # Cache Settings
+    # Cache & Redis Settings
+    REDIS_URL: Optional[str] = "redis://localhost:6379/0"
+    ENABLE_REDIS: bool = True
     CACHE_TTL_SECONDS: int = 3600
-    CACHE_MAXSIZE: int = 1000
+    CACHE_MAXSIZE: int = 2000
+
+    # Sectors Fundamental API Cache TTLs (Credit Optimization)
+    CACHE_TTL_COMPANY_REPORT: int = 86400       # 24 jam (4 credits)
+    CACHE_TTL_QUARTERLY_FINANCIALS: int = 86400  # 24 jam (4 credits)
+    CACHE_TTL_BROKER_SUMMARY: int = 1800         # 30 menit (2 credits)
+    CACHE_TTL_FOREIGN_FLOW: int = 1800           # 30 menit (1 credit)
+    CACHE_TTL_SUSPENSIONS: int = 7200            # 2 jam (1 credit)
 
     # Rate Limiting
     RATE_LIMIT_PER_MINUTE: int = 60

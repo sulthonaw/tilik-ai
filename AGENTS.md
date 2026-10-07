@@ -49,8 +49,16 @@ Setiap agent yang menulis kode atau dokumentasi WAJIB mematuhi 6 aturan berikut 
   - **Level 2 (Zero Latency & Zero AI):** Field `details` yang memuat angka mendalam (valuasi vs peers, broker flow, kesehatan laba) untuk ditampilkan seketika saat pengguna mengetuk *"Lihat Data Lengkap"*. Dilarang menggunakan LLM untuk Level 2 (100% data murni Sectors API).
 * 📊 **INVARIANT 4 (Slang RAG Subsystem):**  
   Pencocokan bahasa gaul bursa wajib memanfaatkan database CSV `data/slang_dictionary.csv` (memuat julukan emiten, aksi transaksi, dan kode broker) yang diindeks ke dalam vector store (ChromaDB/FAISS) untuk menyuplai *ground truth context* ke Gemini Flash.
-* ⚡ **INVARIANT 5 (Optimasi Kuota Sectors API v2):**  
-  Endpoint `/v2/company/report/{symbol}/` memotong kuota 1 kredit per section. Selalu sertakan query param `?sections=overview,valuation,financials,peers` (menghabiskan 4 kredit, menghemat 4 kredit dibandingkan default 8 kredit).
+* ⚡ **INVARIANT 5 (Optimasi Kuota & Multi-Tier Caching Sectors API v2):**  
+  1. **Section Optimization:** Endpoint `/v2/company/report/{symbol}/` memotong kuota 1 kredit per section. Selalu sertakan query param `?sections=overview,valuation,financials,peers` (menghabiskan 4 kredit, menghemat 4 kredit dibandingkan default 8 kredit).
+  2. **Granular Symbol-Level Caching (Credit Saver Core):** Setiap panggilan data bursa tanpa cache memotong hingga 12 kredit. Karena cuitan berbeda kerap membicarakan emiten yang sama, sistem WAJIB meng-cache data Sectors API per symbol & endpoint:
+     * `company_report:{symbol}`: TTL 24 jam (hemat 4 credits)
+     * `quarterly_financials:{symbol}`: TTL 24 jam (hemat 4 credits)
+     * `broker_summary:{symbol}`: TTL 30 menit (hemat 2 credits)
+     * `foreign_flow:{symbol}`: TTL 30 menit (hemat 1 credit)
+     * `suspensions:{symbol}`: TTL 2 jam (hemat 1 credit)
+     * `tweet_verification:{role}:{hash}`: TTL 1 jam
+  3. **Hybrid Engine Architecture:** Menggunakan Redis (`REDIS_URL`) untuk lingkungan container/production dan otomatis fallback tanpa error ke In-Memory `TTLCache` pada pengembangan lokal.
 * 📱 **INVARIANT 6 (Arsitektur Android Tanpa Izin Bahaya):**  
   Hindari penggunaan `AccessibilityService` yang dilarang Google Play. Gunakan **Android `ACTION_PROCESS_TEXT` + Translucent BottomSheet Activity** (Nol izin berbahaya / *zero dangerous permission*).
 
@@ -77,8 +85,8 @@ Setiap agent yang menulis kode atau dokumentasi WAJIB mematuhi 6 aturan berikut 
 ## 5. INSTRUKSI TEKNIS IMPLEMENTASI REPOSITORI `E:\tilik-ai`
 Saat mengimplementasikan kode di `E:\tilik-ai`:
 1. Salin `slang_dictionary.csv` ke dalam `E:\tilik-ai\data\slang_dictionary.csv`.
-2. Gunakan `gemini-2.0-flash` dengan `temperature=0.1` dan `method="json_schema"` untuk output deterministik.
-3. Terapkan multi-tier caching (In-Memory SHA256 cuitan + Redis/Sectors fundamental cache) untuk menghemat biaya token dan kuota API.
+2. Gunakan `gemini-3.1-flash-lite` dengan smart fallback cascade ke `gemini-3.1-flash-lite-preview` / `gemini-2.5-flash`.
+3. Terapkan multi-tier caching (Redis + In-Memory TTLCache) pada level respons verifikasi cuitan dan level fundamental emiten Sectors API guna memangkas konsumsi kredit bursa hingga 95%.
 4. Pastikan berkas `README.md` pada repositori kode backend **HANYA** memuat bab:
    - **1. Pengertian**
    - **2. Cara Install & Menjalankan (venv & Docker)**

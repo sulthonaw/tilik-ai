@@ -156,7 +156,15 @@ Sistem Tilik AI terhubung langsung ke **Sectors Financial API v2** (OpenAPI Cata
   * Endpoint `/v2/company/report/{symbol}/` mengenakan **1 credit per section**.
   * Default behavior (tanpa parameter `sections`) mengambil 8 section (biaya 8 credits).
   * **Tilik AI mewajibkan parameter:** `?sections=overview,valuation,financials,peers` sehingga konsumsi dipangkas 50% menjadi hanya **4 credits**!
-  * Endpoint lainnya (`/v2/financials/quarterly/`, `/v2/broker-summary/{symbol}/top/`, `/v2/foreign-flow/{symbol}/`, `/v2/suspensions/`) masing-masing hanya mengonsumsi **1 credit**.
+  * Endpoint lainnya (`/v2/financials/quarterly/`, `/v2/broker-summary/{symbol}/top/`, `/v2/foreign-flow/{symbol}/`, `/v2/suspensions/`) masing-masing mengonsumsi **1–4 credits**.
+  * **Multi-Tier Caching (Redis + In-Memory TTLCache):** Tanpa cache, setiap verifikasi cuitan unik menghabiskan total **12 credits**. Karena cuitan di medsos sering membahas emiten populer yang sama (misal: GOTO, BBCA), sistem mengimplementasikan caching tingkat simbol dan endpoint:
+    * `company_report:{symbol}`: TTL 24 jam (hemat 4 credits)
+    * `quarterly_financials:{symbol}`: TTL 24 jam (hemat 4 credits)
+    * `broker_summary:{symbol}`: TTL 30 menit (hemat 2 credits)
+    * `foreign_flow:{symbol}`: TTL 30 menit (hemat 1 credit)
+    * `suspensions:{symbol}`: TTL 2 jam (hemat 1 credit)
+    * Panggilan kedua untuk emiten yang sama mengonsumsi **0 credits** (hemat 100% biaya kuota API).
+  * **Hybrid Engine Architecture:** Menggunakan Redis (`REDIS_URL`) pada Docker/production dengan auto-fallback transparan ke In-Memory `TTLCache` di local development.
 
 ### 4.2 Pemetaan Endpoint Riil vs Kebutuhan Tilik AI
 
